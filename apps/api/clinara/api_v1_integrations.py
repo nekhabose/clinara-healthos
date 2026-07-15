@@ -2,8 +2,8 @@
 
 Thin HTTP layer over the hardened gateway, monitoring, dead-letter replay, and delivery
 services. Operators register interfaces, watch health/alerts, inspect + replay dead letters,
-and drive EHR write-back; a SMART-on-FHIR launch endpoint returns the embedded-clinician
-context (spec §6.10.2). Tenant is resolved from the authenticated user and RLS-scoped.
+and drive EHR write-back. Tenant is resolved from the authenticated user and RLS-scoped. The
+SMART-on-FHIR EHR launch surface (spec §6.10.2) lives in ``clinara.api_v1_embedded`` (Phase 8).
 """
 from __future__ import annotations
 
@@ -172,22 +172,8 @@ def write_back_health(request: Request) -> Response:
     return Response(delivery.write_back_health(str(tenant_id)))
 
 
-# ---- SMART on FHIR embedded launch (spec §6.10.2) ----
-
-@api_view(["GET"])
-def smart_launch(request: Request) -> Response:
-    """Return the embedded-clinician launch context for an EHR SMART launch (spec §6.10.2)."""
-    tenant_id = _tenant(request)
-    if not tenant_id:
-        return Response({"detail": "no tenant context"}, status=status.HTTP_403_FORBIDDEN)
-    patient = request.query_params.get("patient", "")
-    return Response({
-        "embedded": True,
-        "tenant_id": str(tenant_id),
-        "patient": patient,
-        "clinician": _actor(request),
-        "surface": "clinician-review",
-    })
+# NOTE: the SMART-on-FHIR EHR launch stub that used to live here was superseded by the real
+# launch + identity bridge in Phase 8 (``clinara.api_v1_embedded`` → ``domains.embedded``).
 
 
 urlpatterns = [
@@ -205,5 +191,4 @@ urlpatterns = [
     path("workflows/<uuid:workflow_id>/release", release, name="workflow-release"),
     path("outbound/<uuid:message_id>/deliver", deliver, name="outbound-deliver"),
     path("delivery/health", write_back_health, name="delivery-health"),
-    path("smart/launch", smart_launch, name="smart-launch"),
 ]

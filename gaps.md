@@ -2,11 +2,11 @@
 ### Feature parity vs. Elaborate (elaborate.com), and the phased plan to reach it
 
 **Author's note (2026-07-15):** This document benchmarks the current implementation
-(Phases 0–6 + GA Hardening, all landed) against **Elaborate** — the product Clinara is a
-replica of — identifies every remaining gap, and lays out a phase-by-phase plan to close
-them. It is a companion to [`plan.md`](plan.md) and continues its phase numbering (next
-open phase is **Phase 7**). Read `plan.md` first for the architectural north star; this
-document assumes it.
+(Phases 0–6 + GA Hardening + Phase 7 Real EMR Connectivity + Phase 8 EHR-Embedded Surface, all
+landed) against **Elaborate** — the product Clinara is a replica of — identifies every remaining
+gap, and lays out a phase-by-phase plan to close them. It is a companion to [`plan.md`](plan.md)
+and continues its phase numbering (next open phase is **Phase 9**). Read `plan.md` first for the
+architectural north star; this document assumes it.
 
 ---
 
@@ -59,8 +59,8 @@ an architectural redirection.
 | **G1** | **Billing / coding optimization** — detect missing/under-coded dx, HCC risk capture | ❌ **Missing** — only a "billing" message *category* exists | `domains/messages/core.py:42` |
 | **G2** | **Real EMR connectivity — SMART Backend Services auth** — client-assertion JWT, token cache/refresh, scopes | ✅ **Closed (Phase 7)** — full SMART flow, injected signer/transport, validated against a vendor-emulating token endpoint | `clinara_integration_sdk/smart.py` |
 | **G3** | **Real write-back / direct-release delivery** — Epic/Athena inbasket + patient-portal adapters | ✅ **Closed (Phase 7)** — `SmartEhrClient` (FHIR `Task`/`Communication`), retrying `deliver`, idempotent `release_result`, degraded-channel alert | `clinara_integration_sdk/fhir_writeback.py`, `domains/delivery/adapters.py` |
-| **G4** | **EHR-embedded clinician surface** — SMART-on-FHIR launch, Epic Showroom / Athena Marketplace, no separate login | ❌ **Missing** — standalone same-origin console only | `clinara/console.py` |
-| **G5** | **Chart-context panel** — surface relevant chart details in-inbox to eliminate chart digging | ⚠️ Partial — `ContextSnapshot` data layer exists; no clinician-facing panel | `domains/context/core.py` |
+| **G4** | **EHR-embedded clinician surface** — SMART-on-FHIR launch, Epic Showroom / Athena Marketplace, no separate login | ✅ **Closed (Phase 8)** — real SMART EHR-launch + OIDC identity bridge (fail-closed, tenant-isolated, audited), embedded surface, marketplace manifests | `clinara_integration_sdk/smart_launch.py`, `domains/embedded`, `clinara/api_v1_embedded.py` |
+| **G5** | **Chart-context panel** — surface relevant chart details in-inbox to eliminate chart digging | ✅ **Closed (Phase 8)** — clinician-facing panel (labs/patient-context/provenance + freshness) over the stored snapshot, beside the item under review | `domains/context/core.py` (`build_context_panel`), `domains/context/services.py` |
 | **G6** | **Multi-specialty breadth (30+ ambulatory specialties)** | ⚠️ Partial — `specialty` plumbed end-to-end; protocol *content* ≈ 6 lab markers | `domains/context/core.py:32`, `MARKER_SPECS` |
 | **G7** | **Data retention & purge** — minimal-necessary retention, 90-day window, BAA-triggered purge | ❌ **Missing** — no retention/purge job found | — |
 
@@ -123,26 +123,47 @@ an architectural redirection.
 - **Invariant held:** duplicate patient communication is prevented by the existing idempotency
   keying, which every path honors; the adapter speaks only FHIR.
 
-### G4 — EHR-embedded clinician surface ❌
+### G4 — EHR-embedded clinician surface ✅ (closed in Phase 8)
 - **Elaborate:** "Built directly into your EMR — no new platforms, no extra clicks, no
   additional logins." Available in the Epic Showroom and Athena Marketplace.
-- **Current state:** The only UI is the standalone demo console (`clinara/console.py`),
-  same-origin over the API, dev/DEBUG only.
-- **Missing:** A SMART-on-FHIR EHR launch (OAuth2 launch/redirect, `fhirContext`, session
-  bridge to Clinara auth), an embeddable clinician review surface, and marketplace packaging
-  (Epic Showroom listing, Athena Marketplace app manifest).
-- **Risk:** Auth bridging between EHR identity and Clinara tenant/role must preserve tenant
-  isolation and audit — reuse `domains/identity` guarantees, do not fork them.
+- **Delivered:**
+  - `clinara_integration_sdk/smart_launch.py` — the pure SMART App Launch (*EHR launch*) flow:
+    well-known discovery, authorize-URL shaping (`aud`/`state`/`nonce`/`launch`), code→token
+    exchange, and OIDC id_token validation with each check independently enforced (signature
+    via an injected `Verifier`, `iss`, `aud`, `exp`, `nonce` — alg-confusion + replay guards).
+  - `domains/embedded` — persistence + identity bridge: `EhrConnection` (issuer→tenant
+    routing), `EhrIdentityLink` (EHR identity → Clinara user, **RLS-enforced**), and
+    `EhrLaunchSession` (the state/nonce handshake + resolved user + hard expiry). `begin_launch`
+    resolves the issuer's tenant and mints the redirect; `complete_launch` exchanges the code,
+    bridges the identity **fail-closed** (no link ⇒ refused), and stamps an expiry from the EHR
+    token so the session cannot outlive the EHR's. Every launch — bridged or denied — is audited
+    and event-published (`EhrLaunched`/`EhrLaunchDenied`).
+  - `clinara/api_v1_embedded.py` + `clinara/embedded_surface.py` — the SMART `launch`/`callback`
+    endpoints (the only unauthenticated surface; the callback establishes the Django session
+    directly — **no separate login**), the embedded review surface (`embedded.html`, framed in
+    the EHR), and the chart-context endpoint.
+  - `clinical/marketplace/{epic-showroom,athena-marketplace}.json` + a deterministic validator
+    (`domains/embedded/marketplace.py`) so a malformed listing fails a test, not a submission.
+- **Validation status:** End-to-end against a vendor-emulating fake EHR (discovery + token
+  endpoint) with an HMAC id_token verifier; production injects an RS256/JWKS `Verifier` by
+  config. **Remaining for GA:** live Epic Showroom / Athena Marketplace listing + the RS256/JWKS
+  verifier wired to each EHR's published keys.
+- **Invariant held:** the bridge **reuses** `domains/identity` (the resolved `User` carries its
+  tenant + role); it never forks auth, and tenant isolation of the identity link is enforced at
+  the database (RLS).
 
-### G5 — Clinician-facing chart-context panel ⚠️
+### G5 — Clinician-facing chart-context panel ✅ (closed in Phase 8)
 - **Elaborate:** Surfaces relevant chart details dynamically in the inbox view — "eliminates
   manual chart digging for medication, referral, and testing decisions."
-- **Current state:** The *data* exists: `build_snapshot` (`domains/context/core.py`) produces
-  a provenance-tracked `ContextSnapshot` the engine reasons over. There is no clinician-facing
-  presentation of it alongside a result/refill/message.
-- **Missing:** A read API + UI panel that renders the snapshot (relevant labs, meds, problems,
-  freshness/provenance) next to the item under review. Largely a presentation layer over
-  existing data — low clinical risk, high UX value.
+- **Delivered:** `build_context_panel` (`domains/context/core.py`) — a pure, presentation-only
+  projection of the immutable `ContextSnapshot` into the labs (value/unit/reference range/trend
+  + in/below/above-range status computed from the snapshot's own range), patient context, and
+  provenance/freshness a clinician needs beside the item under review. `chart_context_panel`
+  (`domains/context/services.py`) reads the stored `ContextSnapshotRecord`; the embedded surface
+  renders it beside the review item via `GET /api/v1/embedded/context/{workflow_id}`. It adds
+  **nothing** — every value shown is drawn verbatim from the snapshot the engine already
+  reasoned over — so the panel is exactly what the decision was based on. Low clinical risk,
+  high UX value.
 
 ### G6 — Multi-specialty protocol breadth ⚠️
 - **Elaborate:** "Rules-based protocols across 30+ ambulatory specialties."
@@ -179,7 +200,7 @@ real customer and is sequenced before go-live.
 | Phase | Title | Closes | Depends on | Parallelizable with |
 |---|---|---|---|---|
 | **7** ✅ | Real EMR Connectivity | G2, G3 | Phase 3 rails | — |
-| **8** | EHR-Embedded Clinician Surface | G4, G5 | Phase 7 | Phase 9 |
+| **8** ✅ | EHR-Embedded Clinician Surface | G4, G5 | Phase 7 | Phase 9 |
 | **9** | Billing & Coding Intelligence | G1 | Phase 5 context | Phase 8 |
 | **10** | Specialty Protocol Breadth | G6 | Phase 2 Studio | Phases 8–9 |
 | **11** | Data Lifecycle & Compliance Hardening | G7 | — (cross-cutting) | all |
@@ -244,30 +265,58 @@ phase assumes them.
 
 ### Phase 8 — EHR-Embedded Clinician Surface
 
-**Status:** ⏳ Planned. **Objective:** Let clinicians work Clinara **inside** their EHR — a
-SMART-on-FHIR launch that embeds the review surface with a live chart-context panel, no extra
-login. **Why now:** Depends on Phase 7 connectivity; matches Elaborate's "native in your EMR,
-no additional logins" distribution.
+**Status:** ✅ **Implemented (validated against a vendor-emulating fake EHR; live marketplace
+listing + RS256/JWKS verifier pending).** A clinician now opens Clinara **inside** their EHR via
+a real SMART-on-FHIR EHR launch: the app discovers the EHR's endpoints, redirects to authorize,
+exchanges the code, validates the OIDC id_token (signature/`iss`/`aud`/`exp`/`nonce`), and
+bridges the EHR identity to a Clinara user — fail-closed, tenant-isolated, audited — establishing
+the session with **no separate login** and an expiry bounded to the EHR token. The embedded
+surface renders the review queue with a live chart-context panel beside each item, and Epic
+Showroom / Athena Marketplace manifests are packaged and validated. All protocol/HTTP/crypto is
+pure and injected (transport, id_token `Verifier`, clock, state/nonce factories), so it runs
+against fakes today and a live Epic/Athena endpoint by configuration alone. See the README
+"Current status — Phase 8" section.
+
+**Objective:** Let clinicians work Clinara **inside** their EHR — a SMART-on-FHIR launch that
+embeds the review surface with a live chart-context panel, no extra login. **Why now:** Depends
+on Phase 7 connectivity; matches Elaborate's "native in your EMR, no additional logins"
+distribution.
 
 #### Workstreams
-1. **SMART-on-FHIR EHR launch** (Frontend + Integration) — OAuth2 launch/redirect,
-   `fhirContext`, session bridge to Clinara identity preserving tenant/role.
-2. **Embeddable review surface** (Frontend) — results/messages/refills review embedded in the
-   EHR iframe/app frame.
-3. **Chart-context panel (G5)** (Backend + Frontend) — read API rendering `ContextSnapshot`
-   (relevant labs/meds/problems + provenance/freshness) beside the item under review.
-4. **Marketplace packaging** (Integration) — Epic Showroom listing + Athena Marketplace app
-   manifest.
+1. **SMART-on-FHIR EHR launch** (Frontend + Integration) — ✅ OAuth2 launch/redirect + code
+   exchange + OIDC id_token validation, session bridge to Clinara identity preserving
+   tenant/role (`clinara_integration_sdk/smart_launch.py`, `domains/embedded`).
+2. **Embeddable review surface** (Frontend) — ✅ results/messages/refills review embedded in the
+   EHR app frame (`clinara/templates/embedded.html`, `clinara/embedded_surface.py`).
+3. **Chart-context panel (G5)** (Backend + Frontend) — ✅ read API rendering `ContextSnapshot`
+   (labs + patient context + provenance/freshness) beside the item under review
+   (`domains/context/core.py:build_context_panel`, `GET /api/v1/embedded/context/{id}`).
+4. **Marketplace packaging** (Integration) — ✅ Epic Showroom listing + Athena Marketplace app
+   manifest + deterministic validator (`clinical/marketplace/`, `domains/embedded/marketplace.py`).
 
 #### Deliverables
-- Clinician launches Clinara from within sandbox Epic; identity bridged, tenant-isolated.
-- Chart-context panel renders live snapshot data with provenance.
-- Marketplace manifests validated.
+- Clinician launches Clinara from within a (fake/sandbox) EHR; identity bridged, tenant-isolated,
+  audited; session established with no separate login and a token-bounded expiry
+  (`apps/api/tests/test_phase8_embedded_surface.py`, `packages/integration-sdk/tests/test_smart_launch.py`).
+- Chart-context panel renders live snapshot data with provenance/freshness.
+- Epic Showroom + Athena Marketplace manifests validated.
+- `GET /api/v1/smart/launch`, `GET /api/v1/smart/callback`, `GET /api/v1/embedded/session`,
+  `GET /api/v1/embedded/context/{workflow_id}` endpoints + admin registration endpoints.
 
 #### Exit / acceptance gate
-- [ ] EHR launch bridges identity → correct Clinara tenant/role; audit records the launch.
-- [ ] Context panel shows relevant chart detail with freshness/provenance; no chart digging.
-- [ ] No separate login; session scoped and expires with the EHR session.
+- [x] EHR launch bridges identity → correct Clinara tenant/role; audit records the launch.
+  *(identity bridge via `EhrIdentityLink`, fail-closed when unlinked; `ehr_launch` audit +
+  `EhrLaunched` event — `test_complete_launch_bridges_identity_to_correct_user_and_audits`,
+  `test_unlinked_identity_is_refused_fail_closed`, `test_identity_link_does_not_cross_tenants`.)*
+- [x] Context panel shows relevant chart detail with freshness/provenance; no chart digging.
+  *(`build_context_panel` labs + patient context + provenance; served over the stored snapshot —
+  `test_build_context_panel_groups_labs_and_provenance`,
+  `test_context_panel_service_reads_snapshot_record`,
+  `test_end_to_end_launch_bridges_session_and_serves_context`.)*
+- [x] No separate login; session scoped and expires with the EHR session. *(callback calls
+  `login()` directly and caps session at the token lifetime; `get_live_session` transitions a
+  lapsed session to EXPIRED — `test_end_to_end_launch_bridges_session_and_serves_context`,
+  `test_get_live_session_expires_and_transitions`.)*
 
 ---
 
@@ -361,9 +410,13 @@ learning loop it **exceeds** what Elaborate publicly documents. The remaining ga
 breadth** — none of which require abandoning the deterministic architecture. Closing Phases
 7–11 brings the replica to functional parity while preserving the invariant in §1.
 
-**Progress:** **Phase 7 (Real EMR Connectivity, G2 + G3) is implemented and tested** — the
-SMART-on-FHIR write-back edge (auth + `Task`/`Communication` writes + retrying, idempotent,
-alerting delivery) is live behind injected transport/signer seams, validated against
-vendor-emulating fakes; live Epic/Athena sandbox certification is the only remaining step for
-those gaps. Phases 8–11 (embedded surface, billing/coding, specialty breadth, retention/purge)
-remain open.
+**Progress:** **Phases 7 and 8 are implemented and tested.** Phase 7 (Real EMR Connectivity,
+G2 + G3) delivered the SMART-on-FHIR write-back edge (auth + `Task`/`Communication` writes +
+retrying, idempotent, alerting delivery). Phase 8 (EHR-Embedded Clinician Surface, G4 + G5)
+delivered the inbound half: a real SMART EHR launch with OIDC identity bridging (fail-closed,
+tenant-isolated, audited, no separate login, EHR-bounded session), a clinician-facing
+chart-context panel over the immutable snapshot, an embedded review surface, and validated
+Epic/Athena marketplace manifests. Both run behind injected transport/verifier/clock seams,
+validated against vendor-emulating fakes; live Epic/Athena sandbox + marketplace certification
+(and the RS256/JWKS id_token verifier) are the remaining steps for those gaps. Phases 9–11
+(billing/coding, specialty breadth, retention/purge) remain open.

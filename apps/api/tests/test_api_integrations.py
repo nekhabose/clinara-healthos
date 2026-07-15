@@ -79,11 +79,8 @@ def test_write_back_and_deliver(client):
     assert delivered.data["status"] == "delivered"
 
 
-def test_smart_launch_returns_embedded_context(client):
-    resp = client.get("/api/v1/smart/launch?patient=P123")
-    assert resp.status_code == 200
-    assert resp.data["embedded"] is True
-    assert resp.data["patient"] == "P123"
+# The SMART launch stub that used to live in the integrations surface was replaced by the real
+# EHR launch + identity bridge in Phase 8 — see tests/test_phase8_embedded_surface.py.
 
 
 def test_requires_authentication():

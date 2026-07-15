@@ -29,6 +29,19 @@ from .smart import (
     SmartConfig,
     build_client_assertion,
 )
+from .smart_launch import (
+    HmacVerifier,
+    LaunchConfig,
+    LaunchContext,
+    SmartEndpoints,
+    SmartLaunchError,
+    Verifier,
+    build_authorize_url,
+    build_test_id_token,
+    decode_id_token,
+    discover_endpoints,
+    exchange_code,
+)
 from .transport import (
     HttpRequest,
     HttpResponse,
@@ -60,6 +73,18 @@ __all__ = [
     "HmacSigner",
     "SmartAuthError",
     "build_client_assertion",
+    # SMART App Launch — EHR launch flow (Phase 8)
+    "LaunchConfig",
+    "SmartEndpoints",
+    "LaunchContext",
+    "Verifier",
+    "HmacVerifier",
+    "SmartLaunchError",
+    "discover_endpoints",
+    "build_authorize_url",
+    "exchange_code",
+    "decode_id_token",
+    "build_test_id_token",
     # FHIR write-back (Phase 7)
     "FhirWriteBackClient",
     "FhirWriteError",

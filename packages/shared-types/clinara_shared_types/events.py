@@ -43,6 +43,9 @@ class EventType(str, Enum):
     # Phase 7 — Real EMR Connectivity (write-back release + degraded-channel alert):
     RESULT_RELEASED = "ResultReleased"
     WRITE_BACK_DEGRADED = "WriteBackDegraded"
+    # Phase 8 — EHR-Embedded Clinician Surface (SMART-on-FHIR launch, identity bridge):
+    EHR_LAUNCHED = "EhrLaunched"
+    EHR_LAUNCH_DENIED = "EhrLaunchDenied"
     CLINICIAN_APPROVED = "ClinicianApproved"
     CLINICIAN_EDITED = "ClinicianEdited"
     CLINICIAN_OVERRODE = "ClinicianOverrode"

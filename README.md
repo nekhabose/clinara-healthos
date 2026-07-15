@@ -109,7 +109,7 @@ packages/
   shared-types/     Domain event envelope, enums (Pydantic)
   clinical-models/  Canonical clinical event + immutable context snapshot (Pydantic)
   protocol-engine/  Deterministic rule engine  ← crown jewel
-  integration-sdk/  HL7/FHIR adapters
+  integration-sdk/  HL7/FHIR adapters, SMART-on-FHIR auth + EHR launch, write-back
   terminology/      LOINC / RxNorm / UCUM mapping
   ui/               Accessible React component library
 infrastructure/
@@ -144,6 +144,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ✅ **Implemented** |
 | **GA** | **GA Hardening** — kill switches, break-glass, SLO evaluation, DR reconciliation, compliance attestation, §13.5 release gate. | ✅ **Implemented** |
 | **Phase 7** | **Real EMR Connectivity** — SMART-on-FHIR write-back (`Task`/`Communication`), retrying/idempotent direct-release, degraded-channel alert. Closes gaps G2 + G3 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live sandbox pending) |
+| **Phase 8** | **EHR-Embedded Clinician Surface** — SMART-on-FHIR EHR launch + OIDC identity bridge (no separate login), clinician chart-context panel, embedded surface, Epic/Athena marketplace manifests. Closes gaps G4 + G5 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live marketplace pending) |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
 
@@ -339,6 +340,62 @@ Safety and governance are preserved throughout:
 | Release + delivery-health API (`/api/v1/workflows/{id}/release`, `/api/v1/delivery/health`) | `apps/api/clinara/api_v1_integrations.py` |
 | Per-vendor endpoint config (env-backed, secrets stay in the vault) | `clinara/settings/base.py` + `production.py` (`EHR_WRITE_BACK`) |
 | Tests (SMART flow, FHIR write-back, retry, end-to-end delivery/release/alert/token reuse) | `packages/integration-sdk/tests/test_{smart,fhir_writeback,retry}.py`, `apps/api/tests/test_phase7_smart_delivery.py` |
+
+---
+
+### Current status — Phase 8 (EHR-Embedded Clinician Surface)
+
+Where Phase 7 gave Clinara the outbound edge (write-back *to* the EMR), Phase 8 gives it the
+inbound edge: a clinician now opens Clinara **from inside** their EHR and is signed in without a
+separate login. This closes gaps **G4** (EHR-embedded surface) and **G5** (chart-context panel)
+from [`gaps.md`](./gaps.md), matching Elaborate's "built directly into your EMR — no new
+platforms, no extra clicks, no additional logins" distribution.
+
+The full **SMART App Launch (EHR launch)** sequence is implemented as a **pure, dependency-
+injected** flow in `clinara_integration_sdk/smart_launch.py`: the app discovers the EHR's
+endpoints from `/.well-known/smart-configuration`, redirects the browser to the EHR authorize
+endpoint (`aud`/`state`/`nonce`/`launch`), exchanges the returned `code` for tokens, and — the
+security-critical step — validates the OIDC `id_token` with **each check independently
+enforced**: the signature (via an injected `Verifier`), `iss`, `aud`, `exp`, and `nonce`
+(alg-confusion + replay guards). The HTTP transport, the JWT verifier, the clock, and the
+state/nonce factories are all injected, so the whole flow is **validated against a
+vendor-emulating fake EHR today** and points at a live Epic/Athena endpoint by configuration
+alone. Dev/test verifies id_tokens with an `HmacVerifier`; production injects an **RS256/JWKS
+verifier** (the flow is identical either way). *Validation is against conformance fakes; a live
+Epic Showroom / Athena Marketplace listing and the JWKS verifier are the remaining GA steps.*
+
+Identity, isolation, and audit are preserved throughout — the bridge **reuses**
+`domains/identity`, it does not fork it:
+
+- **Fail-closed identity bridge.** A launch completes only if the EHR clinician identity
+  (`fhirUser`/`sub`) resolves to a Clinara `User` via an `EhrIdentityLink` **within the issuer's
+  tenant**. No link ⇒ the launch is refused (never bridged to a default account). Every launch —
+  bridged or denied — is audited and emits `EhrLaunched`/`EhrLaunchDenied`.
+- **Tenant isolation at the database.** The issuer→tenant routing (`EhrConnection`) and the
+  `state`-keyed handshake (`EhrLaunchSession`) are resolved *before* any tenant context exists
+  (the launch is unauthenticated), so they sit outside the per-tenant RLS policy by design; the
+  identity link — resolved *after* the tenant is bound — **is** RLS-enforced. A link in tenant A
+  can never satisfy a launch that resolved to tenant B.
+- **No separate login; session expires with the EHR.** The callback establishes the Django
+  session directly and caps its lifetime at the EHR token's `expires_in`, so the embedded
+  session cannot outlive the EHR session; a lapsed session transitions to `EXPIRED`.
+- **Chart-context panel (G5) adds nothing.** `build_context_panel` is a pure, presentation-only
+  projection of the immutable `ContextSnapshot` the engine already reasoned over — labs
+  (value/unit/reference range/trend + in/below/above-range status), patient context, and
+  provenance/freshness — rendered beside the item under review so there is no chart digging.
+
+| Phase 8 deliverable | Where |
+|---|---|
+| SMART App Launch flow (discovery, authorize URL, code exchange, OIDC id_token validation) | `packages/integration-sdk/clinara_integration_sdk/smart_launch.py` |
+| Injected id_token `Verifier` (`HmacVerifier` dev / RS256-JWKS prod) | `…/smart_launch.py`, `apps/api/domains/embedded/adapters.py` |
+| Persistence + identity bridge (`EhrConnection`, `EhrIdentityLink` [RLS], `EhrLaunchSession`) | `apps/api/domains/embedded/models.py` |
+| `begin_launch` / `complete_launch` (fail-closed bridge, audited, event-published, token-bounded session) | `apps/api/domains/embedded/services.py` |
+| Chart-context panel (G5) — pure builder + snapshot read service | `apps/api/domains/context/core.py` (`build_context_panel`), `…/context/services.py` |
+| SMART launch/callback + embedded session + context API | `apps/api/clinara/api_v1_embedded.py` |
+| Embedded review surface (rendered in the EHR app frame) | `apps/api/clinara/embedded_surface.py`, `apps/api/clinara/templates/embedded.html` |
+| Epic Showroom + Athena Marketplace manifests + deterministic validator | `clinical/marketplace/*.json`, `apps/api/domains/embedded/marketplace.py` |
+| id_token verifier config (secrets/keys injected, never stored) | `clinara/settings/base.py` (`EHR_LAUNCH`) |
+| Tests (launch flow + id_token validation; end-to-end bridge, isolation, expiry, panel, manifests) | `packages/integration-sdk/tests/test_smart_launch.py`, `apps/api/tests/test_phase8_embedded_surface.py` |
 
 ---
 

@@ -53,6 +53,8 @@ DOMAIN_APPS = [
     "domains.protocols",
     # Phase 3 — Production EHR Integration:
     "domains.delivery",
+    # Phase 8 — EHR-Embedded Clinician Surface:
+    "domains.embedded",
     # Phase 4 — Prescription & Refill Intelligence:
     "domains.refills",
     # Phase 5 — Patient Message Intelligence:
@@ -90,7 +92,9 @@ ASGI_APPLICATION = "clinara.asgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # The EHR-embedded surface (Phase 8) renders in all environments; the demo console
+        # template lives here too but its URLs are DEBUG-gated.
+        "DIRS": [str(BASE_DIR / "clinara" / "templates")],
         "APP_DIRS": True,
         "OPTIONS": {"context_processors": [
             "django.contrib.auth.context_processors.auth",
@@ -171,3 +175,12 @@ LOGGING = {
 # The JWT signer is injected at call time (production: RS384 over a vault-held key) and is
 # never stored here — this block holds endpoints and non-secret client identifiers only.
 EHR_WRITE_BACK: dict[str, dict] = {}
+
+# ---- EHR-embedded SMART launch (plan Phase 8 — EHR-Embedded Clinician Surface) ----
+# Injection config for the inbound OIDC id_token verifier used by the SMART EHR-launch flow.
+# Production sets ``id_token_verifier`` to an RS256/JWKS ``Verifier`` (resolved from the EHR's
+# published keys); dev/demo may set ``dev_id_token_secret`` for an HMAC verifier. Empty by
+# default so no environment can complete a launch until a verifier is explicitly configured
+# (fail-closed — an unverifiable id_token is never trusted). Issuer→tenant routing and the
+# app's client registration live in the ``embedded.EhrConnection`` table, not here.
+EHR_LAUNCH: dict = {}

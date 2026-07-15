@@ -98,3 +98,73 @@ def snapshot_hash(snapshot: ContextSnapshot) -> str:
     """Stable content hash for replay/audit (plan §1.1 — immutable, hashed snapshot)."""
     material = snapshot.model_dump_json()
     return hashlib.sha256(material.encode()).hexdigest()
+
+
+def build_context_panel(*, facts: dict, provenance: dict) -> dict:
+    """Project a stored snapshot into the clinician-facing chart-context panel (plan Phase 8 —
+    closes G5). Pure and presentation-only: it re-groups the flat, provenance-tracked snapshot
+    facts into the labs / patient-context / provenance a clinician needs beside the item under
+    review, so no chart digging is required. It never adds facts or makes a clinical judgement
+    — every value shown is drawn verbatim from the snapshot the engine already reasoned over.
+
+    Returns ``{"labs", "patient_context", "specialty", "provenance"}`` where each lab carries
+    its value, unit, reference range, trend, prior value, and an in/below/above-range status
+    computed purely from the range already in the snapshot.
+    """
+    labs: list[dict] = []
+    lab = _lab_from_facts(facts)
+    if lab is not None:
+        labs.append(lab)
+
+    patient_context = {
+        key[len("patient."):]: value
+        for key, value in facts.items()
+        if key.startswith("patient.")
+    }
+
+    freshness = provenance.get("data_freshness_seconds", {}) or {}
+    panel_provenance = {
+        "source_record_ids": provenance.get("source_record_ids", []),
+        "freshness_seconds": freshness,
+        "freshest_source_seconds": min(freshness.values()) if freshness else None,
+        "missing_facts": provenance.get("missing_facts", []),
+        "conflicting_facts": provenance.get("conflicting_facts", []),
+        "transformations": provenance.get("transformations", []),
+        "terminology_mappings": provenance.get("terminology_mappings", {}),
+        "builder_version": provenance.get("context_builder_version", ""),
+    }
+    return {
+        "labs": labs,
+        "patient_context": patient_context,
+        "specialty": facts.get("context.specialty"),
+        "provenance": panel_provenance,
+    }
+
+
+def _lab_from_facts(facts: dict) -> dict | None:
+    """Extract the single lab result carried in a results snapshot, or ``None`` if absent."""
+    if facts.get("lab.marker") is None or facts.get("lab.value") is None:
+        return None
+    value = facts.get("lab.value")
+    ref_low = facts.get("lab.ref_low")
+    ref_high = facts.get("lab.ref_high")
+    return {
+        "marker": facts.get("lab.marker"),
+        "value": value,
+        "unit": facts.get("lab.unit"),
+        "reference_range": {"low": ref_low, "high": ref_high},
+        "prior_value": facts.get("lab.prior_value"),
+        "trend": facts.get("lab.trend"),
+        "status": _range_status(value, ref_low, ref_high),
+    }
+
+
+def _range_status(value, ref_low, ref_high) -> str:
+    """in_range / below_range / above_range / unknown — purely from the snapshot's own range."""
+    if value is None or (ref_low is None and ref_high is None):
+        return "unknown"
+    if ref_low is not None and value < ref_low:
+        return "below_range"
+    if ref_high is not None and value > ref_high:
+        return "above_range"
+    return "in_range"

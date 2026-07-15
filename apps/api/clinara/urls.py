@@ -17,7 +17,11 @@ urlpatterns = [
     path("api/v1/", include("clinara.api_v1_refills")),  # Phase 4 — Refill Intelligence
     path("api/v1/", include("clinara.api_v1_messages")),  # Phase 5 — Message Intelligence
     path("api/v1/", include("clinara.api_v1_analytics")),  # Phase 6 — Analytics & Personalization
+    path("api/v1/", include("clinara.api_v1_embedded")),  # Phase 8 — EHR-Embedded Surface
 ]
+
+# EHR-embedded clinician surface — rendered inside the EHR after a SMART launch (Phase 8).
+urlpatterns += [path("embedded/", include("clinara.embedded_surface"))]
 
 # Demo console — dev/demo only (same-origin UI over the API). Never mounted in production.
 if settings.DEBUG:
