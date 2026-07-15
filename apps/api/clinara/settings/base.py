@@ -55,7 +55,9 @@ DOMAIN_APPS = [
     "domains.delivery",
     # Phase 4 — Prescription & Refill Intelligence:
     "domains.refills",
-    # Phase 5+ (declared here as the code lands):
+    # Phase 5 — Patient Message Intelligence:
+    "domains.messages",
+    # Phase 6+ (declared here as the code lands):
     # "domains.feedback",
     # "domains.analytics",
 ]

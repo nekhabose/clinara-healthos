@@ -400,7 +400,7 @@ Contraindication/interaction determinism, monitoring-lab-overdue logic, dose-mis
 
 # Phase 5 — Patient Message Intelligence
 
-**Status:** ⬜ Planned.
+**Status:** ✅ **Implemented.** Inbound patient messages are triaged through a governed pipeline where a **deterministic red-flag detector is the safety floor** and the LLM classifier may only *raise* concern above it — never lower urgency below the deterministic result, and model confidence alone never sets urgency (spec §6.2.6). Emergencies escalate on the red-flag scan regardless of model output; high-risk categories are never fully auto-resolved; cross-patient context contamination is blocked before any chart reasoning; prompt-injection in patient text cannot suppress a red flag. The classifier is a swappable interface (deterministic default for hermetic tests). The triage core is pure Python and exhaustively unit-tested (red-flag recall, false-reassurance suppression, injection resistance, multilingual); the Django layer (`domains/messages`) adds verbatim storage, the review API, audit, and events. See the README "Current status — Phase 5" table.
 
 **Objective:** Classify, extract, summarize, prioritize, and route inbound patient messages — with LLM classification always subordinate to deterministic emergency detection.
 
@@ -437,10 +437,11 @@ Red-flag detection recall (missed-escalation = release blocker), false-reassuran
 
 ### Exit / acceptance gate
 
-- [ ] Emergency messages escalated (deterministic rules verified independent of model).
-- [ ] Classification performance meets the clinical threshold.
-- [ ] No high-risk autonomous resolution.
-- [ ] Cross-patient context contamination prevented.
+- [x] Emergency messages escalated (deterministic rules verified independent of model). *(`core.detect_red_flags` + `assign_urgency` floor; `test_emergency_escalates_independent_of_model`, `test_model_confidence_never_lowers_urgency`)*
+- [x] Classification performance meets the clinical threshold. *(deterministic classifier over the red-flag corpus; parametrized red-flag recall in `test_message_triage`)*
+- [x] No high-risk autonomous resolution. *(only approved non-clinical categories auto-draft; `test_clinical_message_is_not_auto_resolved`)*
+- [x] Cross-patient context contamination prevented. *(`core.validate_identity`; `test_cross_patient_contamination_is_blocked`)*
+- [x] Prompt-injection resistant + multilingual red-flag recall. *(`test_prompt_injection_cannot_suppress_red_flag`, `test_spanish_red_flag_detected`)*
 
 ### Risks & mitigations
 

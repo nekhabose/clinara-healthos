@@ -25,6 +25,9 @@ class EventType(str, Enum):
     # Phase 4 — Prescription & Refill Intelligence:
     REFILL_EVALUATED = "RefillEvaluated"
     REFILL_DECIDED = "RefillDecided"
+    # Phase 5 — Patient Message Intelligence:
+    MESSAGE_CLASSIFIED = "MessageClassified"
+    MESSAGE_ROUTED = "MessageRouted"
     CONTEXT_BUILT = "ContextBuilt"
     PROTOCOL_EVALUATED = "ProtocolEvaluated"
     DECISION_CREATED = "DecisionCreated"

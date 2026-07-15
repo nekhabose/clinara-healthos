@@ -140,7 +140,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ✅ **Implemented** |
 | **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ✅ **Implemented** |
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ✅ **Implemented** |
-| **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ⬜ Planned |
+| **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ✅ **Implemented** |
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ⬜ Planned |
 | **GA** | Compliance attestation (HIPAA / SOC 2 Type II), DR drills, scale & performance SLOs. | ⬜ Planned |
 
@@ -248,10 +248,34 @@ choose an outcome or change a medication.
 | Ingest → decide → persist → audit → events; human review actions (spec §6.3.6) | `domains/refills/services.py` |
 | Refill inbox + review API (`/api/v1/refills…`) | `apps/api/clinara/api_v1_refills.py` |
 
+### Current status — Phase 5 (Patient Message Intelligence)
+
+The most LLM-dependent module — built last, on the battle-tested deterministic scaffolding.
+Inbound patient messages are stored **verbatim**, then triaged through a governed pipeline
+whose defining property is a **deterministic red-flag detector as the safety floor**: the
+LLM classifier may only *raise* concern above it, never lower urgency below the deterministic
+result, and **model confidence alone never sets urgency** (spec §6.2.6). So an emergency
+phrased inside an otherwise "administrative" message — or a prompt-injection instruction —
+still escalates. The classifier is a **swappable interface** (deterministic keyword default
+for hermetic tests; an LLM implements the same protocol in production). Cross-patient context
+contamination is blocked **before** any chart reasoning; high-risk clinical categories are
+never fully auto-resolved.
+
+| Phase 5 deliverable | Where |
+|---|---|
+| Deterministic, multilingual red-flag detection over the verbatim message (spec §6.2.6) | `domains/messages/core.detect_red_flags` |
+| Swappable classifier (the LLM role); confidence never sets urgency | `core.Classifier` / `RuleBasedClassifier` |
+| Deterministic urgency = red-flag floor ∨ category baseline (spec §6.2.4) | `core.assign_urgency` / `most_urgent` |
+| Cross-patient contamination guard before chart reasoning (spec §6.2.6) | `core.validate_identity` |
+| Routing + approved-response drafting; clinical never auto-resolved | `core.route`, `services._APPROVED_RESPONSES` |
+| Verbatim storage + explainable triage record + review actions | `domains/messages/{models,services}.py` |
+| Patient-message inbox + review API (`/api/v1/messages…`) | `apps/api/clinara/api_v1_messages.py` |
+
 Run the tests: `cd apps/api && pytest` (results + Rule Studio + gateway + delivery + refills +
-API + app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit
-tests/clinical-regression` (the deterministic clinical core + Studio core + HL7/durable/refill
-core + golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
+messages + API + app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages
+tests/unit tests/clinical-regression` (the deterministic clinical core + Studio core +
+HL7/durable/refill/triage core + golden dataset). PostgreSQL RLS is verified by the `rls` CI
+job.
 
 ---
 

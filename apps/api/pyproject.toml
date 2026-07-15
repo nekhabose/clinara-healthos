@@ -45,7 +45,10 @@ extend-exclude = ["**/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
-ignore = ["DJ001"]  # null=True on optional string fields is a deliberate choice here
+# DJ001: null=True on optional string fields is a deliberate choice here.
+# UP042: we use the `(str, Enum)` idiom (matching packages/) rather than StrEnum for
+# stable JSON/`.value` semantics across the shared contract layer.
+ignore = ["DJ001", "UP042"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
