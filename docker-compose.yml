@@ -1,0 +1,82 @@
+# Local development stack. Not for production (see infrastructure/terraform).
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clinara}
+      # Bootstrap superuser; the app connects as a separate non-superuser role so RLS is enforced.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: [.env]
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./apps/api:/app
+      - ./packages:/packages
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: [.env]
+    command: celery -A clinara.celery worker -l info
+    volumes:
+      - ./apps/api:/app
+      - ./packages:/packages
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+
+  outbox-relay:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: [.env]
+    # Relays committed domain events from the outbox to the event bus (no silent loss).
+    command: celery -A clinara.celery beat -l info
+    volumes:
+      - ./apps/api:/app
+      - ./packages:/packages
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    env_file: [.env]
+    command: npm run dev
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:

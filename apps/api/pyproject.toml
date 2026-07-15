@@ -1,0 +1,44 @@
+[project]
+name = "clinara-api"
+version = "0.0.0"
+description = "Clinara HealthOS — backend modular monolith (Django + DRF)"
+requires-python = ">=3.11"
+dependencies = [
+  "Django>=5.0,<6.0",
+  "djangorestframework>=3.15",
+  "pydantic>=2.6",
+  "psycopg[binary]>=3.1",
+  "redis>=5.0",
+  "celery>=5.3",
+  "django-environ>=0.11",
+  "opentelemetry-sdk>=1.24",
+  "opentelemetry-instrumentation-django>=0.45b0",
+  # Local workspace packages (editable installs in dev).
+  "clinara-shared-types",
+  "clinara-clinical-models",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-django>=4.8",
+  "ruff>=0.4",
+  "mypy>=1.9",
+  "django-stubs>=5.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "clinara.settings.local"
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+strict = true

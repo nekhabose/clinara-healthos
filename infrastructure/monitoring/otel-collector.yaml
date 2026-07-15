@@ -1,0 +1,36 @@
+# OpenTelemetry Collector — local/dev baseline (spec §7.2 Observability, §12).
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  # Defense-in-depth: drop attributes that could carry PHI before export.
+  attributes/scrub-phi:
+    actions:
+      - key: patient_name
+        action: delete
+      - key: mrn
+        action: delete
+      - key: dob
+        action: delete
+
+exporters:
+  debug:
+    verbosity: normal
+  # Wire Datadog/CloudWatch exporters per environment.
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes/scrub-phi, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
