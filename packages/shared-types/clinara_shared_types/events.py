@@ -50,6 +50,11 @@ class EventType(str, Enum):
     CLINICIAN_EDITED = "ClinicianEdited"
     CLINICIAN_OVERRODE = "ClinicianOverrode"
     PATIENT_RESPONDED = "PatientResponded"
+    # Phase 9 — Billing & Coding Intelligence (deterministic, human-confirmed suggestions):
+    CODING_SUGGESTIONS_GENERATED = "CodingSuggestionsGenerated"
+    CODING_SUGGESTION_CONFIRMED = "CodingSuggestionConfirmed"
+    CODING_SUGGESTION_REJECTED = "CodingSuggestionRejected"
+    CODING_SUGGESTION_EXPORTED = "CodingSuggestionExported"
     # Phase 2 — Clinical Rule Studio lifecycle (spec §6.5.4/§6.5.8):
     PROTOCOL_SIMULATED = "ProtocolSimulated"
     PROTOCOL_APPROVED = "ProtocolApproved"

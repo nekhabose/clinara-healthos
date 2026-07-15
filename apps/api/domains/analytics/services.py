@@ -50,7 +50,7 @@ def dashboards(tenant_id: str) -> dict[str, Any]:
     )
     metrics = core.aggregate_feedback(actions).as_dict()
     by_type: dict[str, dict] = {}
-    for wtype in ("results", "refill", "message"):
+    for wtype in ("results", "refill", "message", "coding"):
         t_actions = list(
             ClinicianFeedback.objects.filter(tenant_id=tenant_id, workflow_type=wtype)
             .values_list("action", flat=True)

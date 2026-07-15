@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/v1/", include("clinara.api_v1_messages")),  # Phase 5 — Message Intelligence
     path("api/v1/", include("clinara.api_v1_analytics")),  # Phase 6 — Analytics & Personalization
     path("api/v1/", include("clinara.api_v1_embedded")),  # Phase 8 — EHR-Embedded Surface
+    path("api/v1/", include("clinara.api_v1_coding")),  # Phase 9 — Billing & Coding Intelligence
 ]
 
 # EHR-embedded clinician surface — rendered inside the EHR after a SMART launch (Phase 8).

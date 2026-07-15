@@ -62,6 +62,8 @@ DOMAIN_APPS = [
     # Phase 6 — Analytics & Personalization:
     "domains.feedback",
     "domains.analytics",
+    # Phase 9 — Billing & Coding Intelligence:
+    "domains.coding",
     # GA hardening — emergency controls, reliability, DR, compliance:
     "domains.killswitch",
     "domains.reliability",

@@ -145,6 +145,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **GA** | **GA Hardening** — kill switches, break-glass, SLO evaluation, DR reconciliation, compliance attestation, §13.5 release gate. | ✅ **Implemented** |
 | **Phase 7** | **Real EMR Connectivity** — SMART-on-FHIR write-back (`Task`/`Communication`), retrying/idempotent direct-release, degraded-channel alert. Closes gaps G2 + G3 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live sandbox pending) |
 | **Phase 8** | **EHR-Embedded Clinician Surface** — SMART-on-FHIR EHR launch + OIDC identity bridge (no separate login), clinician chart-context panel, embedded surface, Epic/Athena marketplace manifests. Closes gaps G4 + G5 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live marketplace pending) |
+| **Phase 9** | **Billing & Coding Intelligence** — deterministic revenue-integrity module: documented-uncoded / HCC-gap / specificity-upgrade detectors over the canonical snapshot, evidence-linked, human-confirmed review queue, export-gated on confirmation, acceptance/override fed into the Phase 6 loop. Closes gap G1 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
 
@@ -396,6 +397,68 @@ Identity, isolation, and audit are preserved throughout — the bridge **reuses*
 | Epic Showroom + Athena Marketplace manifests + deterministic validator | `clinical/marketplace/*.json`, `apps/api/domains/embedded/marketplace.py` |
 | id_token verifier config (secrets/keys injected, never stored) | `clinara/settings/base.py` (`EHR_LAUNCH`) |
 | Tests (launch flow + id_token validation; end-to-end bridge, isolation, expiry, panel, manifests) | `packages/integration-sdk/tests/test_smart_launch.py`, `apps/api/tests/test_phase8_embedded_surface.py` |
+
+---
+
+### Current status — Phase 9 (Billing & Coding Intelligence)
+
+Phase 9 adds Elaborate's one missing revenue module — **coding optimization** — closing gap
+**G1** in [`gaps.md`](./gaps.md): *"detects missing or under-coded diagnoses through patient
+context analysis… improves documentation integrity and supports compliant risk capture."* It
+rides on the exact same chart context the results pipeline already produced, and it holds the
+architectural invariant that governs the whole platform — **governed clinical logic decides, no
+model-driven clinical decision** — while carrying the extra compliance weight that coding demands
+(upcoding is an audit exposure, so every suggestion must be deterministic, evidence-linked, and
+human-confirmed).
+
+The new `domains/coding` module analyses the canonical `ContextSnapshot` facts + documented
+problem list + encounter diagnoses and flags three kinds of revenue-integrity gap **as
+suggestions in an inert review queue, never applied to a claim**:
+
+- **Documented-but-uncoded** — an active problem-list condition whose ICD-10 code is absent from
+  the encounter's diagnoses.
+- **HCC / risk-adjustment gap** — a risk-adjustable condition *suspected* from objective lab
+  evidence at/over a diagnostic threshold (e.g. A1c ≥ 6.5% ⇒ suspected diabetes; eGFR < 60 ⇒
+  suspected CKD stage 3+) yet neither documented nor coded. Always flagged
+  `requires_provider_confirmation` — a suspected diagnosis is a prompt to the provider, never an
+  assertion.
+- **Specificity upgrade** — an unspecified code on the encounter the chart can sharpen (e.g.
+  unspecified CKD `N18.9` + a staging eGFR → the specific stage; diabetes without complications
+  `E11.9` + CKD evidence → diabetes *with* diabetic CKD).
+
+The safety posture mirrors the Phase 6 governed loop and is enforced in code, not convention:
+
+- **Deterministic + evidence-linked, or it does not exist.** The clinical content (ICD-10 codes,
+  HCC tags, the KDIGO eGFR→CKD staging table, the ADA A1c threshold) is codified as *data* in
+  `catalog.py` — the same way `MARKER_SPECS` codifies lab thresholds — so every suggestion is
+  replayable. `core.analyze` **asserts** no suggestion is ever produced without concrete
+  supporting evidence.
+- **Conservative anti-upcoding thresholds.** Below the A1c diagnostic cut-off, or at eGFR ≥ 60,
+  the module suggests **nothing** — it never reaches for the higher-weighted code (proven by
+  negative unit tests).
+- **Nothing auto-applies; a human is always in the loop.** Suggestions are created `PENDING`.
+  Only `confirm_suggestion` / `reject_suggestion` (actor-attributed, audited, event-published)
+  advance one, and `export_suggestion` releases **only** a `CONFIRMED` suggestion — a pending or
+  rejected one can never be exported.
+- **Governed, not a side metric.** Each confirm/reject is captured as `coding` feedback
+  (approve/override) in the Phase 6 loop, so coding acceptance and override rates surface on the
+  same governed dashboards as every other clinician action.
+
+*Everything is pure and Django-free at the core (`core.py`, `catalog.py`), so the anti-upcoding
+guardrails are exhaustively unit-tested (23 dedicated tests; full suite green — 153 passed). The
+seed catalog covers the six Phase-1 markers' downstream conditions (diabetes, CKD); breadth
+across specialties extends it through the same governed authoring path in Phase 10.*
+
+| Phase 9 deliverable | Where |
+|---|---|
+| Deterministic clinical catalog (ICD-10, HCC tags, eGFR→CKD staging, A1c threshold) | `apps/api/domains/coding/catalog.py` |
+| Pure gap detectors + `analyze` (documented-uncoded, HCC gap, specificity upgrade; evidence guardrail) | `apps/api/domains/coding/core.py` |
+| Review-queue persistence (`CodingSuggestionRecord`, RLS-isolated, idempotent per gap) | `apps/api/domains/coding/models.py`, `…/migrations/0002_enable_rls.py` |
+| Governed lifecycle (analyze / confirm / reject / export gate; audit + events; analytics hook) | `apps/api/domains/coding/services.py` |
+| Rides the immutable snapshot the engine already reasoned over | `analyze_from_snapshot` → `apps/api/domains/context/models.py` |
+| HTTP surface (`/api/v1/coding/analyze`, `/suggestions`, `/{id}/confirm|reject|export`) | `apps/api/clinara/api_v1_coding.py` |
+| Acceptance/override fed into the Phase 6 governed dashboards | `apps/api/domains/analytics/services.py` (workflow-type loop) |
+| Tests (each detector incl. negative cases, export gate, no-auto-apply, idempotency, tenant isolation, analytics hook) | `apps/api/tests/test_phase9_coding.py`, `apps/api/tests/test_api_coding.py` |
 
 ---
 

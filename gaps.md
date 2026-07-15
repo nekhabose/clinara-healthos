@@ -2,11 +2,12 @@
 ### Feature parity vs. Elaborate (elaborate.com), and the phased plan to reach it
 
 **Author's note (2026-07-15):** This document benchmarks the current implementation
-(Phases 0–6 + GA Hardening + Phase 7 Real EMR Connectivity + Phase 8 EHR-Embedded Surface, all
-landed) against **Elaborate** — the product Clinara is a replica of — identifies every remaining
-gap, and lays out a phase-by-phase plan to close them. It is a companion to [`plan.md`](plan.md)
-and continues its phase numbering (next open phase is **Phase 9**). Read `plan.md` first for the
-architectural north star; this document assumes it.
+(Phases 0–6 + GA Hardening + Phase 7 Real EMR Connectivity + Phase 8 EHR-Embedded Surface +
+Phase 9 Billing & Coding Intelligence, all landed) against **Elaborate** — the product Clinara
+is a replica of — identifies every remaining gap, and lays out a phase-by-phase plan to close
+them. It is a companion to [`plan.md`](plan.md) and continues its phase numbering (next open
+phase is **Phase 10**). Read `plan.md` first for the architectural north star; this document
+assumes it.
 
 ---
 
@@ -56,7 +57,7 @@ an architectural redirection.
 | — | Rx module — one-click refills, summarized charts | ✅ Strong (12-step deterministic cascade) | Phase 4 `domains/refills` |
 | — | Analytics — acceptance/override tracking, inbox optimization | ✅ Exceeds (governed, approval-gated learning) | Phase 6 `domains/analytics` |
 | — | HIPAA / SOC 2 posture, tenant isolation, audit | ✅ Present | `domains/compliance`, `domains/audit`, RLS |
-| **G1** | **Billing / coding optimization** — detect missing/under-coded dx, HCC risk capture | ❌ **Missing** — only a "billing" message *category* exists | `domains/messages/core.py:42` |
+| **G1** | **Billing / coding optimization** — detect missing/under-coded dx, HCC risk capture | ✅ **Closed (Phase 9)** — deterministic `domains/coding`: documented-uncoded + HCC-gap + specificity-upgrade detectors, evidence-linked, human-confirmed review queue, export-gated, analytics-fed | `domains/coding/core.py`, `domains/coding/services.py`, `clinara/api_v1_coding.py` |
 | **G2** | **Real EMR connectivity — SMART Backend Services auth** — client-assertion JWT, token cache/refresh, scopes | ✅ **Closed (Phase 7)** — full SMART flow, injected signer/transport, validated against a vendor-emulating token endpoint | `clinara_integration_sdk/smart.py` |
 | **G3** | **Real write-back / direct-release delivery** — Epic/Athena inbasket + patient-portal adapters | ✅ **Closed (Phase 7)** — `SmartEhrClient` (FHIR `Task`/`Communication`), retrying `deliver`, idempotent `release_result`, degraded-channel alert | `clinara_integration_sdk/fhir_writeback.py`, `domains/delivery/adapters.py` |
 | **G4** | **EHR-embedded clinician surface** — SMART-on-FHIR launch, Epic Showroom / Athena Marketplace, no separate login | ✅ **Closed (Phase 8)** — real SMART EHR-launch + OIDC identity bridge (fail-closed, tenant-isolated, audited), embedded surface, marketplace manifests | `clinara_integration_sdk/smart_launch.py`, `domains/embedded`, `clinara/api_v1_embedded.py` |
@@ -68,19 +69,41 @@ an architectural redirection.
 
 ## 3. Gap details
 
-### G1 — Billing / Coding Optimization module ❌
+### G1 — Billing / Coding Optimization module ✅ (closed in Phase 9)
 - **Elaborate:** "Detects missing or under-coded diagnoses through patient context analysis…
   improves documentation integrity and supports compliant risk capture." A revenue-integrity
   module riding on the same chart context.
-- **Current state:** No coding/diagnosis-gap logic exists. `BILLING` appears only as a
-  patient-message *category* used for routing (`domains/messages/core.py:42`), not as
-  chart analysis.
-- **Missing:** A deterministic `domains/coding` domain that, given the canonical
-  `ContextSnapshot` + problem list + encounter dx, flags (a) documented-but-uncoded
-  conditions, (b) HCC/risk-adjustment gaps (suspected-but-unaddressed), (c) specificity
-  upgrades — as **suggestions in a review queue**, never auto-applied to a claim.
-- **Risk:** Coding suggestions have compliance/audit exposure (upcoding). Must be
-  deterministic, evidence-linked, and human-confirmed — same governance posture as Phase 6.
+- **Delivered:** A deterministic `domains/coding` domain that, given the canonical
+  `ContextSnapshot` facts + documented problem list + encounter diagnoses, flags three gap
+  types as **suggestions in a review queue, never auto-applied to a claim**:
+  - `domains/coding/catalog.py` — the codified clinical content (ICD-10 codes, HCC tags,
+    the KDIGO eGFR→CKD staging table, the ADA A1c diagnostic threshold). Data, not model
+    output, so every suggestion is replayable — the same way `MARKER_SPECS` codifies lab
+    thresholds.
+  - `domains/coding/core.py` — pure, Django-free detectors: **documented-but-uncoded**
+    (active problem whose code is off the encounter), **HCC gap** (a risk-adjustable
+    condition *suspected* from a lab value at/over threshold yet undocumented — always
+    `requires_provider_confirmation`), and **specificity upgrade** (unspecified code on the
+    encounter the chart can sharpen). Two hard anti-upcoding guardrails live here:
+    *no-evidence ⇒ no-suggestion* (asserted in `analyze`) and conservative thresholds
+    (nothing below the A1c diagnostic cut-off or at eGFR ≥ 60).
+  - `domains/coding/services.py` — the governed lifecycle: `analyze_encounter` /
+    `analyze_from_snapshot` (rides the immutable snapshot the engine already reasoned over)
+    create suggestions `PENDING`; `confirm_suggestion` / `reject_suggestion` are the only
+    ways one advances (actor-attributed, audited, event-published); `export_suggestion`
+    releases **only** a confirmed suggestion — a pending/rejected one can never be exported.
+    Every decision hash-chains an `AuditEvent` and feeds the Phase 6 governed loop as
+    `coding` feedback (approve/override), so acceptance/override rates are tracked like every
+    other clinician action.
+  - `clinara/api_v1_coding.py` — the analyze / review-queue / confirm / reject / export
+    endpoints (`/api/v1/coding/*`), tenant-resolved and RLS-scoped.
+- **Validation status:** 23 dedicated tests (`apps/api/tests/test_phase9_coding.py`,
+  `test_api_coding.py`) covering each detector incl. **negative/no-support cases**, the
+  export-before-confirm block, no-auto-apply, idempotent re-analysis, tenant isolation, and
+  the analytics hook. Full suite green (153 passed).
+- **Invariant held:** no model-driven clinical decision — the suggestions are pure
+  deterministic logic over the canonical snapshot; the human confirms before anything leaves
+  Clinara (same governance posture as Phase 6).
 
 ### G2 — Real EMR connectivity: SMART Backend Services auth ✅ (closed in Phase 7)
 - **Elaborate:** Embedded in the EMR via FHIR or direct integration; production Epic/Athena.
@@ -201,7 +224,7 @@ real customer and is sequenced before go-live.
 |---|---|---|---|---|
 | **7** ✅ | Real EMR Connectivity | G2, G3 | Phase 3 rails | — |
 | **8** ✅ | EHR-Embedded Clinician Surface | G4, G5 | Phase 7 | Phase 9 |
-| **9** | Billing & Coding Intelligence | G1 | Phase 5 context | Phase 8 |
+| **9** ✅ | Billing & Coding Intelligence | G1 | Phase 5 context | Phase 8 |
 | **10** | Specialty Protocol Breadth | G6 | Phase 2 Studio | Phases 8–9 |
 | **11** | Data Lifecycle & Compliance Hardening | G7 | — (cross-cutting) | all |
 
@@ -322,27 +345,52 @@ distribution.
 
 ### Phase 9 — Billing & Coding Intelligence
 
-**Status:** ⏳ Planned. **Objective:** Add the deterministic revenue-integrity module —
-detect missing/under-coded diagnoses and HCC/risk-capture gaps as human-confirmed suggestions.
-**Why now:** Rides on the same chart context (Phase 5/7); parallelizable with Phase 8.
+**Status:** ✅ **Implemented (deterministic, evidence-linked, human-confirmed; full suite
+green).** A new `domains/coding` module turns the canonical chart context into revenue-integrity
+suggestions in an inert review queue — documented-but-uncoded, HCC/risk-adjustment gaps
+(suspected-but-unaddressed), and specificity upgrades — each evidence-linked and impossible to
+auto-apply. The clinical thresholds/codes are codified as data (`catalog.py`), the detectors are
+pure and Django-free (`core.py`), and the governed lifecycle (`services.py`) creates every
+suggestion `PENDING`, requires a human confirm/reject, gates export on confirmation, audits every
+decision, and feeds acceptance/override into the Phase 6 loop. See the README "Current status —
+Phase 9" section.
+
+**Objective:** Add the deterministic revenue-integrity module — detect missing/under-coded
+diagnoses and HCC/risk-capture gaps as human-confirmed suggestions. **Why now:** Rides on the
+same chart context (Phase 5/7); parallelizable with Phase 8.
 
 #### Workstreams
-1. **Coding domain** (Backend) — new `domains/coding`; deterministic gap rules over the
-   canonical snapshot + problem list + encounter dx.
-2. **Gap detectors** (Clinical + Backend) — documented-but-uncoded, HCC suspecting
-   (suspected-but-unaddressed), specificity upgrades — each evidence-linked.
-3. **Review queue + governance** (Backend + Frontend) — suggestions are inert/pending;
-   human confirmation required before anything leaves Clinara; full audit.
-4. **Analytics hook** (Backend) — acceptance/override rates feed the Phase 6 governed loop.
+1. **Coding domain** (Backend) — ✅ new `domains/coding`; deterministic gap rules over the
+   canonical snapshot + problem list + encounter dx (`core.py`, `catalog.py`).
+2. **Gap detectors** (Clinical + Backend) — ✅ documented-but-uncoded, HCC suspecting
+   (suspected-but-unaddressed), specificity upgrades — each evidence-linked, with negative
+   (no-support) cases proven (`detect_documented_uncoded`, `detect_hcc_gaps`,
+   `detect_specificity_upgrades`).
+3. **Review queue + governance** (Backend + Frontend) — ✅ suggestions are inert/pending;
+   human confirm/reject required; export gated on confirmation; full hash-chained audit
+   (`services.py`, `clinara/api_v1_coding.py`).
+4. **Analytics hook** (Backend) — ✅ confirm→approve / reject→override captured as `coding`
+   feedback so acceptance/override rates flow into the Phase 6 governed dashboards
+   (`domains/analytics/services.py` workflow-type loop).
 
 #### Deliverables
-- Suggestion queue with evidence links; nothing auto-applied to a claim.
-- Deterministic, unit-tested detectors; upcoding guardrails (specificity/support required).
+- ✅ Suggestion queue with evidence links; nothing auto-applied to a claim
+  (`CodingSuggestionRecord`, `/api/v1/coding/*`).
+- ✅ Deterministic, unit-tested detectors; upcoding guardrails (no-evidence-no-suggestion +
+  conservative thresholds) — `test_phase9_coding.py`, `test_api_coding.py` (23 tests).
 
 #### Exit / acceptance gate
-- [ ] Every suggestion is deterministic, evidence-linked, and human-confirmed before export.
-- [ ] No suggestion can be auto-applied; audit shows actor + evidence for each acceptance.
-- [ ] Detectors covered by unit tests incl. negative (no-support → no-suggestion) cases.
+- [x] Every suggestion is deterministic, evidence-linked, and human-confirmed before export.
+  *(pure detectors over the snapshot; `export_suggestion` raises unless status is `CONFIRMED` —
+  `test_export_requires_confirmation_gate`, `test_analyze_review_confirm_export_flow`.)*
+- [x] No suggestion can be auto-applied; audit shows actor + evidence for each acceptance.
+  *(all suggestions created `PENDING`; `confirm_suggestion` writes `coding_suggestion_confirmed`
+  audit with actor + evidence — `test_analyze_creates_pending_queue_nothing_auto_applied`,
+  `test_confirm_advances_audits_and_feeds_analytics_loop`.)*
+- [x] Detectors covered by unit tests incl. negative (no-support → no-suggestion) cases.
+  *(A1c below threshold, eGFR ≥ 60, already-documented, and no-unspecified-code cases all
+  yield nothing — `test_hcc_gap_*`, `test_specificity_upgrade_silent_without_the_unspecified_code`,
+  `test_analyze_is_deterministic_evidence_linked_and_empty_on_no_signal`.)*
 
 ---
 
@@ -410,13 +458,17 @@ learning loop it **exceeds** what Elaborate publicly documents. The remaining ga
 breadth** — none of which require abandoning the deterministic architecture. Closing Phases
 7–11 brings the replica to functional parity while preserving the invariant in §1.
 
-**Progress:** **Phases 7 and 8 are implemented and tested.** Phase 7 (Real EMR Connectivity,
+**Progress:** **Phases 7, 8, and 9 are implemented and tested.** Phase 7 (Real EMR Connectivity,
 G2 + G3) delivered the SMART-on-FHIR write-back edge (auth + `Task`/`Communication` writes +
 retrying, idempotent, alerting delivery). Phase 8 (EHR-Embedded Clinician Surface, G4 + G5)
 delivered the inbound half: a real SMART EHR launch with OIDC identity bridging (fail-closed,
 tenant-isolated, audited, no separate login, EHR-bounded session), a clinician-facing
 chart-context panel over the immutable snapshot, an embedded review surface, and validated
-Epic/Athena marketplace manifests. Both run behind injected transport/verifier/clock seams,
-validated against vendor-emulating fakes; live Epic/Athena sandbox + marketplace certification
-(and the RS256/JWKS id_token verifier) are the remaining steps for those gaps. Phases 9–11
-(billing/coding, specialty breadth, retention/purge) remain open.
+Epic/Athena marketplace manifests. Phase 9 (Billing & Coding Intelligence, G1) added the
+deterministic revenue-integrity module: evidence-linked documented-uncoded / HCC-gap /
+specificity-upgrade detectors over the canonical snapshot, an inert human-confirmed review queue
+with an export-on-confirmation gate, full audit, and an acceptance/override feedback hook into the
+Phase 6 loop — no model-driven coding decision anywhere. Phases 7/8 run behind injected
+transport/verifier/clock seams, validated against vendor-emulating fakes; live Epic/Athena sandbox
++ marketplace certification (and the RS256/JWKS id_token verifier) are the remaining steps for
+those gaps. Phases 10–11 (specialty breadth, retention/purge) remain open.
