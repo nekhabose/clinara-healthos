@@ -66,6 +66,8 @@ DOMAIN_APPS = [
     "domains.coding",
     # Phase 10 — Specialty Protocol Breadth:
     "domains.specialties",
+    # Phase 11 — Data Lifecycle & Compliance Hardening:
+    "domains.retention",
     # GA hardening — emergency controls, reliability, DR, compliance:
     "domains.killswitch",
     "domains.reliability",

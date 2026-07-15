@@ -58,6 +58,10 @@ class EventType(str, Enum):
     # Phase 10 — Specialty Protocol Breadth (per-tenant threshold customization):
     SPECIALTY_THRESHOLD_UPDATED = "SpecialtyThresholdUpdated"
     SPECIALTY_THRESHOLD_RESET = "SpecialtyThresholdReset"
+    # Phase 11 — Data Lifecycle & Compliance Hardening (retention/purge, BAA termination):
+    RETENTION_POLICY_UPDATED = "RetentionPolicyUpdated"
+    DATA_PURGED = "DataPurged"                 # a scheduled minimization/purge run completed
+    TENANT_DATA_PURGED = "TenantDataPurged"    # a BAA-termination hard-purge completed
     # Phase 2 — Clinical Rule Studio lifecycle (spec §6.5.4/§6.5.8):
     PROTOCOL_SIMULATED = "ProtocolSimulated"
     PROTOCOL_APPROVED = "ProtocolApproved"

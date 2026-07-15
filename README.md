@@ -147,6 +147,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 8** | **EHR-Embedded Clinician Surface** — SMART-on-FHIR EHR launch + OIDC identity bridge (no separate login), clinician chart-context panel, embedded surface, Epic/Athena marketplace manifests. Closes gaps G4 + G5 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live marketplace pending) |
 | **Phase 9** | **Billing & Coding Intelligence** — deterministic revenue-integrity module: documented-uncoded / HCC-gap / specificity-upgrade detectors over the canonical snapshot, evidence-linked, human-confirmed review queue, export-gated on confirmation, acceptance/override fed into the Phase 6 loop. Closes gap G1 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
 | **Phase 10** | **Specialty Protocol Breadth** — canonical catalog grown to 25 markers; 7 validated, parameterized protocol packs covering 34 ambulatory specialties; per-tenant threshold customization bound as data at load time and gated so it can never weaken safety. No engine change. Closes gap G6 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
+| **Phase 11** | **Data Lifecycle & Compliance Hardening** — deterministic per-tenant retention policy (90-day raw-inbound default, bounded); scheduled minimization purge (idempotent, tenant-scoped, cascade-aware, dry-run proof-of-scope); BAA-termination hard-purge with a content-hashed certificate of destruction. The append-only audit trail is never a purge target. Closes gap G7 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
 
@@ -520,6 +521,67 @@ catalog/critical); full suite green — 176 API + package tests passed. Authorin
 | Wired into the engine path (base rules + tenant-bound packs) | `apps/api/domains/workflows/services.py` |
 | HTTP surface (`/api/v1/specialties`, `/packs`, `/packs/{key}/thresholds`) | `apps/api/clinara/api_v1_specialties.py` |
 | Tests (pack gate, coverage, safety guard, per-tenant customization, tenant isolation, API) | `apps/api/tests/test_phase10_specialties.py`, `…/test_api_specialties.py`, `packages/**/test_phase10_*.py` |
+
+---
+
+### Current status — Phase 11 (Data Lifecycle & Compliance Hardening)
+
+Phase 11 closes the final gap, **G7** in [`gaps.md`](./gaps.md) — Elaborate's *"minimal necessary
+data retained for 90 days; fully purged on termination per BAA."* It adds a new `domains/retention`
+module under the platform invariant *no model-driven decision*: **what gets destroyed is a pure,
+deterministic function of (policy, clock, data)** — never a model output. With this phase landed,
+**every identified gap (G1–G7) is closed.**
+
+**Retention is a codified schedule, not code branches.** `domains/retention/catalog.py` lists every
+purgeable category with its minimal-necessary default window — raw inbound PHI (HL7/FHIR payloads,
+verbatim patient messages, dead letters, outbound messages) defaults to a tight **90 days**; derived
+clinical records (observations, context snapshots, results/refill workflows, coding suggestions,
+feedback) to 365 — and whether the daily job sweeps it (`windowed`) or it is termination-only
+(reference data like a patient's medication list). Adding a category is a **data change**, the same
+posture as `MARKER_SPECS`. Hard `MIN`/`MAX` bounds mean a window can never be zero or unbounded.
+
+**The purge logic is pure and exhaustively unit-tested (`core.py`).** `resolve_windows` overlays a
+practice's overrides on the defaults; `validate_window` rejects an unknown, zero, or unbounded window
+*before* anything is touched; `cutoff_for`/`is_expired` are deterministic and boundary-safe (a row
+exactly on the cutoff is **kept**); and `build_certificate` produces a content-hashed **certificate
+of destruction** whose digest an auditor can recompute from the stored lines — the same
+tamper-evidence as the compliance attestation digest.
+
+**Three governed operations (`services.py`), each audited and tenant-scoped:**
+
+- **Per-tenant retention policy** — `set_retention_window` versions and audits every change to a
+  `RetentionPolicy`; the effective window is the catalog default overlaid with the practice's
+  bounded overrides.
+- **Scheduled minimization purge** — `run_scheduled_purge` sweeps every windowed category past its
+  per-tenant cutoff. It is **deterministic, idempotent** (a second pass in the window purges nothing
+  new), **tenant-bound** (RLS session var set per run; an explicit `tenant_id` filter belt-and-
+  suspenders), and **cascade-aware** (child rows — message classifications, workflow evaluations/
+  communications, delivery attempts — go with their parent). `dry_run=True` reports the counts
+  without deleting: the proof-of-scope path. It runs on a Celery beat (daily) and via
+  `python manage.py purge_expired`.
+- **BAA-termination hard-purge** — `terminate_tenant` destroys **all** of a tenant's PHI regardless
+  of age, marks the policy terminated, and persists a `CertificateOfDestruction`.
+
+**The audit trail is never a purge target.** `AuditEvent` is append-only and hash-chained; every
+purge instead *appends* one `data_purge` audit record and publishes `DataPurged`/`TenantDataPurged`
+via the transactional outbox, and the certificate records how many audit events were **retained** —
+proving the trail survived. A purge for tenant A can never reach tenant B's rows.
+
+*Proven end-to-end: expired rows purged while fresh rows and other tenants' rows are untouched;
+children cascade; re-runs are no-ops; a termination purge is complete and its certificate hash is
+recomputable by an auditor. 24 dedicated tests (`test_phase11_retention.py`, `test_api_retention.py`);
+full suite green — 200 passed.*
+
+| Phase 11 deliverable | Where |
+|---|---|
+| Codified retention schedule (categories, 90-day default, `windowed`, bounds) | `apps/api/domains/retention/catalog.py` |
+| Pure purge logic (`resolve_windows`, `validate_window`, `cutoff_for`, `build_certificate`) | `apps/api/domains/retention/core.py` |
+| Per-tenant policy + purge-run + certificate models (RLS-isolated) | `apps/api/domains/retention/models.py`, `…/migrations/0002_enable_rls.py` |
+| Governed lifecycle (policy, scheduled purge, termination, purge-target registry) | `apps/api/domains/retention/services.py` |
+| Scheduled path (Celery beat + ops command) | `apps/api/domains/retention/tasks.py`, `…/management/commands/purge_expired.py`, `apps/api/clinara/celery.py` |
+| HTTP surface (`/api/v1/retention/policy`, `/purge`, `/runs`, `/terminate`, `/certificate`) | `apps/api/clinara/api_v1_retention.py` |
+| Domain events (`RetentionPolicyUpdated`, `DataPurged`, `TenantDataPurged`) | `packages/shared-types/clinara_shared_types/events.py` |
+| Tests (bounds, cutoff, cascade, idempotency, dry-run, audit-preserved, tenant isolation, termination, API) | `apps/api/tests/test_phase11_retention.py`, `…/test_api_retention.py` |
 
 ---
 

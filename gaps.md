@@ -3,11 +3,12 @@
 
 **Author's note (2026-07-15):** This document benchmarks the current implementation
 (Phases 0–6 + GA Hardening + Phase 7 Real EMR Connectivity + Phase 8 EHR-Embedded Surface +
-Phase 9 Billing & Coding Intelligence + Phase 10 Specialty Protocol Breadth, all landed)
+Phase 9 Billing & Coding Intelligence + Phase 10 Specialty Protocol Breadth +
+Phase 11 Data Lifecycle & Compliance Hardening, all landed)
 against **Elaborate** — the product Clinara is a replica of — identifies every remaining gap,
 and lays out a phase-by-phase plan to close them. It is a companion to [`plan.md`](plan.md) and
-continues its phase numbering (next open phase is **Phase 11**). Read `plan.md` first for the
-architectural north star; this document assumes it.
+continues its phase numbering. **With Phase 11 landed, every identified gap (G1–G7) is closed.**
+Read `plan.md` first for the architectural north star; this document assumes it.
 
 ---
 
@@ -63,7 +64,7 @@ an architectural redirection.
 | **G4** | **EHR-embedded clinician surface** — SMART-on-FHIR launch, Epic Showroom / Athena Marketplace, no separate login | ✅ **Closed (Phase 8)** — real SMART EHR-launch + OIDC identity bridge (fail-closed, tenant-isolated, audited), embedded surface, marketplace manifests | `clinara_integration_sdk/smart_launch.py`, `domains/embedded`, `clinara/api_v1_embedded.py` |
 | **G5** | **Chart-context panel** — surface relevant chart details in-inbox to eliminate chart digging | ✅ **Closed (Phase 8)** — clinician-facing panel (labs/patient-context/provenance + freshness) over the stored snapshot, beside the item under review | `domains/context/core.py` (`build_context_panel`), `domains/context/services.py` |
 | **G6** | **Multi-specialty breadth (30+ ambulatory specialties)** | ✅ **Closed (Phase 10)** — catalog grown to 25 markers; 7 validated, parameterized protocol packs cover **34 ambulatory specialties** (tested coverage); per-tenant threshold customization with no code change, gated so it can never weaken safety | `packages/terminology/markers.py`, `clinical/protocols/specialties/`, `domains/specialties` |
-| **G7** | **Data retention & purge** — minimal-necessary retention, 90-day window, BAA-triggered purge | ❌ **Missing** — no retention/purge job found | — |
+| **G7** | **Data retention & purge** — minimal-necessary retention, 90-day window, BAA-triggered purge | ✅ **Closed (Phase 11)** — deterministic `domains/retention`: per-tenant window policy (90-day raw-inbound default, bounded so it can't be zero/unbounded), scheduled minimization purge (idempotent, tenant-scoped, cascade-aware), BAA-termination hard-purge with a content-hashed certificate of destruction; the append-only audit trail is never a purge target | `domains/retention/core.py`, `domains/retention/services.py`, `clinara/api_v1_retention.py` |
 
 ---
 
@@ -226,16 +227,42 @@ an architectural redirection.
   floor still runs first and un-weakenably. Breadth scales through the Rule Studio governance,
   not engineering.
 
-### G7 — Data retention & purge lifecycle ❌
+### G7 — Data retention & purge lifecycle ✅ (closed in Phase 11)
 - **Elaborate:** "Minimal necessary data retained for 90 days; fully purged on termination
   per BAA."
-- **Current state:** Compliance/audit domains exist, but no retention window or purge job was
-  found.
-- **Missing:** Per-tenant retention policy, a scheduled minimization/purge job (raw inbound
-  messages, PHI beyond the necessary window), and a BAA-termination hard-purge with an
-  auditable certificate of destruction.
-- **Risk:** Purge must not break audit-trail integrity or tenant isolation; must be
-  provably scoped and logged.
+- **Delivered:** A deterministic `domains/retention` domain that owns the whole data lifecycle
+  without introducing any model-driven decision — what gets destroyed is a pure function of
+  (policy, clock, data):
+  - `domains/retention/catalog.py` — the codified retention **schedule as data**: every
+    purgeable category with its minimal-necessary default window (raw inbound PHI = **90 days**,
+    derived clinical records = 365), whether the daily job sweeps it (`windowed`) or it is
+    termination-only, plus the hard `MIN`/`MAX` bounds. Adding a category is a data change, not
+    an engine edit — the same posture as `MARKER_SPECS` and `coding/catalog.py`.
+  - `domains/retention/core.py` — pure, Django-free logic: `resolve_windows` (defaults overlaid
+    with overrides), `validate_window` (rejects unknown/zero/unbounded windows before anything
+    is touched), `cutoff_for`/`is_expired` (deterministic, boundary-safe), and `build_certificate`
+    — a content-hashed **certificate of destruction** whose digest is recomputable by an auditor
+    (same tamper-evidence as the compliance attestation digest).
+  - `domains/retention/services.py` — the governed lifecycle: a per-tenant `RetentionPolicy`
+    (`set_retention_window`, versioned + audited), `run_scheduled_purge` (sweeps every windowed
+    category past its per-tenant cutoff — deterministic, **idempotent**, tenant-bound, cascade-
+    aware; `dry_run` for proof-of-scope), and `terminate_tenant` (BAA hard-purge of **all** PHI +
+    a persisted `CertificateOfDestruction`, marking the policy terminated). Every purge writes one
+    hash-chained `data_purge` `AuditEvent`, publishes `DataPurged`/`TenantDataPurged`, and the
+    certificate records how many audit events were **retained** — the append-only audit trail is
+    never itself a purge target. `PURGE_TARGETS` maps each category to its concrete ORM model(s).
+  - `domains/retention/tasks.py` + `management/commands/purge_expired.py` — the scheduled path
+    (Celery beat, daily) and an ops/backfill command; both bind each tenant's RLS context before
+    touching a row. `clinara/api_v1_retention.py` — inspect/tune the policy, run/dry-run a purge,
+    review purge history, and (admin-gated) execute a certified termination (`/api/v1/retention/*`).
+- **Validation status:** 24 dedicated tests (`apps/api/tests/test_phase11_retention.py`,
+  `test_api_retention.py`) covering the pure bounds/cutoff/certificate logic, expired-purged-vs-
+  fresh-kept, cascade of child rows, idempotent re-run, dry-run-doesn't-delete, audit-trail-
+  preserved, **tenant isolation** (a purge cannot cross tenants), the full certified termination,
+  the auditor's certificate-hash recomputation, and the admin role gate. Full suite green
+  (200 passed).
+- **Invariant held:** no model-driven decision — the purge is pure deterministic logic; it is
+  bounded, tenant-scoped, audited, and the audit trail survives every purge (§1).
 
 ---
 
@@ -253,7 +280,7 @@ real customer and is sequenced before go-live.
 | **8** ✅ | EHR-Embedded Clinician Surface | G4, G5 | Phase 7 | Phase 9 |
 | **9** ✅ | Billing & Coding Intelligence | G1 | Phase 5 context | Phase 8 |
 | **10** ✅ | Specialty Protocol Breadth | G6 | Phase 2 Studio | Phases 8–9 |
-| **11** | Data Lifecycle & Compliance Hardening | G7 | — (cross-cutting) | all |
+| **11** ✅ | Data Lifecycle & Compliance Hardening | G7 | — (cross-cutting) | all |
 
 ---
 
@@ -476,29 +503,57 @@ effort, not engine work; parallelizable once Studio (Phase 2) is proven.
 
 ### Phase 11 — Data Lifecycle & Compliance Hardening
 
-**Status:** ⏳ Planned. **Objective:** Implement minimal-necessary retention, scheduled purge,
-and BAA-termination hard-purge with certificate of destruction. **Why now:** Compliance-gating
-for any real customer; cross-cutting, can run alongside all phases but must land before GA
-sign-off with real PHI.
+**Status:** ✅ **Implemented (deterministic, tenant-scoped, audited, certified; full suite
+green).** A new `domains/retention` module owns the whole data lifecycle: a per-tenant retention
+policy (minimal-necessary 90-day raw-inbound default, bounded so it can never be zero or
+unbounded), a scheduled minimization purge that sweeps every windowed PHI category past its
+per-tenant cutoff (deterministic, idempotent, tenant-bound, cascade-aware, with a `dry_run`
+proof-of-scope path), and a BAA-termination hard-purge that destroys all of a tenant's PHI and
+issues a content-hashed certificate of destruction. Every purge appends one hash-chained
+`data_purge` audit event and publishes a domain event; the append-only audit trail is never a
+purge target and the certificate records how many audit events were retained. The pure
+bounds/cutoff/certificate logic (`core.py`) and the retention schedule (`catalog.py`) are
+Django-free and exhaustively unit-tested; the scheduled path runs on a Celery beat and via a
+management command. No model-driven decision anywhere (the §1 invariant holds). See the README
+"Current status — Phase 11" section.
+
+**Objective:** Implement minimal-necessary retention, scheduled purge, and BAA-termination
+hard-purge with certificate of destruction. **Why now:** Compliance-gating for any real
+customer; cross-cutting, can run alongside all phases but must land before GA sign-off with real
+PHI.
 
 #### Workstreams
-1. **Retention policy** (Backend) — per-tenant policy model; default minimal-necessary window
-   (e.g. 90 days for raw inbound).
-2. **Scheduled minimization/purge** (Backend) — job that purges raw messages/PHI past window
-   without breaking audit-trail integrity or tenant isolation.
-3. **BAA-termination purge** (Backend + Compliance) — hard-purge on offboarding; auditable
-   certificate of destruction.
-4. **Verification** (Compliance) — proof of scope: what was purged, what audit metadata is
-   retained, tenant-scoped.
+1. **Retention policy** (Backend) — ✅ per-tenant `RetentionPolicy` (JSON window overrides +
+   version), minimal-necessary defaults in `catalog.py` (90 days for raw inbound), bounded and
+   validated in `core.validate_window` (`domains/retention/{catalog,core,models,services}.py`).
+2. **Scheduled minimization/purge** (Backend) — ✅ `run_scheduled_purge` sweeps expired rows per
+   category (cascade-aware, idempotent), tenant-bound (RLS), on a Celery beat + `purge_expired`
+   command; the audit trail is preserved (`services.py`, `tasks.py`, `management/commands/`).
+3. **BAA-termination purge** (Backend + Compliance) — ✅ `terminate_tenant` hard-purges all PHI
+   and persists a content-hashed `CertificateOfDestruction`; policy marked terminated.
+4. **Verification** (Compliance) — ✅ `dry_run` proof-of-scope, per-category counts + cutoffs on
+   every `PurgeRun`, retained-audit-event count on the certificate, recomputable digest.
 
 #### Deliverables
-- Retention policy enforced by a scheduled job; purge is idempotent and audited.
-- BAA-termination purge produces a certificate of destruction.
+- ✅ Retention policy enforced by a scheduled job; purge is idempotent and audited
+  (`RetentionPolicy`, `PurgeRun`, `/api/v1/retention/*`).
+- ✅ BAA-termination purge produces a certificate of destruction (`CertificateOfDestruction`,
+  `terminate_tenant`) — verified in `test_phase11_retention.py`, `test_api_retention.py` (24 tests).
 
 #### Exit / acceptance gate
-- [ ] PHI past the retention window is purged on schedule; audit integrity preserved.
-- [ ] Termination purge is complete, tenant-scoped, and certified.
-- [ ] Purge operations are themselves audited and cannot cross tenant boundaries.
+- [x] PHI past the retention window is purged on schedule; audit integrity preserved.
+  *(expired rows purged, fresh kept, children cascaded, audit trail only grows —
+  `test_scheduled_purge_removes_expired_keeps_fresh`,
+  `test_scheduled_purge_cascades_children_and_is_audited_and_evented`,
+  `test_audit_trail_is_never_purged`.)*
+- [x] Termination purge is complete, tenant-scoped, and certified.
+  *(all PHI regardless of age destroyed; content-hashed certificate; auditor recomputes the
+  digest from stored lines — `test_terminate_purges_all_phi_certifies_and_preserves_audit`,
+  `test_certificate_hash_matches_the_pure_core_recomputation`.)*
+- [x] Purge operations are themselves audited and cannot cross tenant boundaries.
+  *(every purge writes a `data_purge` audit + `DataPurged`/`TenantDataPurged` event; a purge for
+  tenant A leaves tenant B untouched — `test_purge_cannot_cross_tenant_boundaries`,
+  `test_purge_all_tenants_skips_terminated_and_sweeps_active`.)*
 
 ---
 
@@ -506,12 +561,12 @@ sign-off with real PHI.
 
 Clinara has already replicated Elaborate's **hardest, most defensible layer** — the
 deterministic, auditable protocol core with governance — and in the Rule Studio and governed
-learning loop it **exceeds** what Elaborate publicly documents. The one remaining gap is the
-**compliance lifecycle** (retention/purge, G7) — which does not require abandoning the
-deterministic architecture. Closing Phase 11 brings the replica to functional parity while
-preserving the invariant in §1.
+learning loop it **exceeds** what Elaborate publicly documents. **With Phase 11 landed, every
+identified gap (G1–G7) is closed** — including the final one, the **compliance lifecycle**
+(retention/purge, G7) — without abandoning the deterministic architecture. The replica is at
+functional parity while preserving the invariant in §1.
 
-**Progress:** **Phases 7, 8, 9, and 10 are implemented and tested.** Phase 7 (Real EMR Connectivity,
+**Progress:** **Phases 7, 8, 9, 10, and 11 are implemented and tested.** Phase 7 (Real EMR Connectivity,
 G2 + G3) delivered the SMART-on-FHIR write-back edge (auth + `Task`/`Communication` writes +
 retrying, idempotent, alerting delivery). Phase 8 (EHR-Embedded Clinician Surface, G4 + G5)
 delivered the inbound half: a real SMART EHR launch with OIDC identity bridging (fail-closed,
@@ -525,7 +580,10 @@ Phase 6 loop — no model-driven coding decision anywhere. Phase 10 (Specialty P
 G6) grew the catalog to 25 markers and authored 7 validated, parameterized protocol packs
 covering 34 ambulatory specialties, plus per-tenant threshold customization that is bound as
 data at load time and gated so it can never weaken safety — all without an engine change.
-Phases 7/8 run behind injected transport/verifier/clock seams, validated against
+Phase 11 (Data Lifecycle & Compliance Hardening, G7) added the deterministic `domains/retention`
+module: a bounded per-tenant retention policy, a scheduled minimization purge (idempotent,
+tenant-scoped, cascade-aware), and a BAA-termination hard-purge with a content-hashed certificate
+of destruction — every purge audited and event-published, the append-only audit trail never a
+purge target. Phases 7/8 run behind injected transport/verifier/clock seams, validated against
 vendor-emulating fakes; live Epic/Athena sandbox + marketplace certification (and the RS256/JWKS
-id_token verifier) are the remaining steps for those gaps. Only **Phase 11** (data
-retention/purge, G7) remains open.
+id_token verifier) are the remaining GA steps for those gaps. **No identified gap remains open.**
