@@ -144,6 +144,34 @@ def deliver(request: Request, message_id: str) -> Response:
                      "external_id": message.external_id or None})
 
 
+@api_view(["POST"])
+def release(request: Request, workflow_id: str) -> Response:
+    """Release an approved result: exactly one patient-portal message + one EHR task,
+    idempotent per workflow (plan Phase 7). Delivers through the configured EHR adapter when
+    one is provided, otherwise the confirming stub."""
+    tenant_id = _tenant(request)
+    if not tenant_id:
+        return Response({"detail": "no tenant context"}, status=status.HTTP_403_FORBIDDEN)
+    b = request.data
+    result = delivery.release_result(
+        tenant_id=str(tenant_id), workflow_id=str(workflow_id),
+        patient_target=b.get("patient_target", ""),
+        care_team_target=b.get("care_team_target", "care_team"),
+        portal_subject=b.get("subject", ""), portal_body=b.get("body", ""),
+        task_note=b.get("task_note", ""), actor=_actor(request),
+    )
+    return Response(result, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def write_back_health(request: Request) -> Response:
+    """Write-back health + degraded verdict for the ops dashboard (plan Phase 7)."""
+    tenant_id = _tenant(request)
+    if not tenant_id:
+        return Response({"detail": "no tenant context"}, status=status.HTTP_403_FORBIDDEN)
+    return Response(delivery.write_back_health(str(tenant_id)))
+
+
 # ---- SMART on FHIR embedded launch (spec §6.10.2) ----
 
 @api_view(["GET"])
@@ -174,6 +202,8 @@ urlpatterns = [
     path("dead-letters/<uuid:dead_letter_id>/replay", replay_dead_letter,
          name="dead-letter-replay"),
     path("workflows/<uuid:workflow_id>/write-back", write_back, name="workflow-write-back"),
+    path("workflows/<uuid:workflow_id>/release", release, name="workflow-release"),
     path("outbound/<uuid:message_id>/deliver", deliver, name="outbound-deliver"),
+    path("delivery/health", write_back_health, name="delivery-health"),
     path("smart/launch", smart_launch, name="smart-launch"),
 ]
