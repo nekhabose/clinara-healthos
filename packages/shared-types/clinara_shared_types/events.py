@@ -28,6 +28,10 @@ class EventType(str, Enum):
     # Phase 5 — Patient Message Intelligence:
     MESSAGE_CLASSIFIED = "MessageClassified"
     MESSAGE_ROUTED = "MessageRouted"
+    # Phase 6 — Analytics & Personalization:
+    FEEDBACK_CAPTURED = "FeedbackCaptured"
+    RECOMMENDATION_CREATED = "RecommendationCreated"
+    RECOMMENDATION_APPROVED = "RecommendationApproved"
     CONTEXT_BUILT = "ContextBuilt"
     PROTOCOL_EVALUATED = "ProtocolEvaluated"
     DECISION_CREATED = "DecisionCreated"

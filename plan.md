@@ -452,7 +452,7 @@ Red-flag detection recall (missed-escalation = release blocker), false-reassuran
 
 # Phase 6 — Analytics & Personalization
 
-**Status:** ⬜ Planned.
+**Status:** ✅ **Implemented.** The feedback loop is closed. Clinician actions (approve/edit/override/escalate) are captured with edit-difference analysis and aggregated into Executive/Clinical/Operations dashboards. Personalization is a **recommendation engine, not an actuator**: derived preferences and config recommendations are inert `pending` data that take effect only through explicit human approval — no path applies a change autonomously. A derived preference is validated against the safety-protected field set, so it **provably cannot weaken safety** (spec §6.4.3); cross-tenant analysis is de-identified and small cells are suppressed (spec §12.5). The aggregation/derivation/safety-guard/privacy core is pure Python and exhaustively unit-tested; the Django layer (`domains/feedback`, `domains/analytics`) adds persistence, the API, audit, and events. See the README "Current status — Phase 6" table.
 
 **Objective:** Close the loop — turn accumulated clinician feedback into governed analytics and *approval-gated* personalization that never weakens safety.
 
@@ -488,10 +488,10 @@ Analytics correctness, aggregation-threshold enforcement, cross-tenant de-identi
 
 ### Exit / acceptance gate
 
-- [ ] Personalization remains fully auditable.
-- [ ] Recommendations require approval before taking effect.
-- [ ] Cross-tenant privacy controls validated.
-- [ ] Preference profiles provably cannot weaken safety constraints.
+- [x] Personalization remains fully auditable. *(every capture/derive/approve emits an audit record + event; `test_feedback_capture_computes_edit_difference`, `test_recommendation_events_emitted`)*
+- [x] Recommendations require approval before taking effect. *(created `pending`; preference `active=False` until `approve_recommendation`; `test_recommendation_is_pending_until_approved`)*
+- [x] Cross-tenant privacy controls validated. *(`core.deidentify` + `suppress_small_cells`; `test_cross_tenant_report_is_deidentified`)*
+- [x] Preference profiles provably cannot weaken safety constraints. *(`core.assert_preference_safe` over `SAFETY_PROTECTED_FIELDS`; `test_preference_cannot_touch_safety_field`)*
 
 ### Risks & mitigations
 

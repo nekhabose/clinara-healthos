@@ -141,7 +141,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ✅ **Implemented** |
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ✅ **Implemented** |
 | **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ✅ **Implemented** |
-| **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ⬜ Planned |
+| **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ✅ **Implemented** |
 | **GA** | Compliance attestation (HIPAA / SOC 2 Type II), DR drills, scale & performance SLOs. | ⬜ Planned |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
@@ -271,11 +271,33 @@ never fully auto-resolved.
 | Verbatim storage + explainable triage record + review actions | `domains/messages/{models,services}.py` |
 | Patient-message inbox + review API (`/api/v1/messages…`) | `apps/api/clinara/api_v1_messages.py` |
 
-Run the tests: `cd apps/api && pytest` (results + Rule Studio + gateway + delivery + refills +
-messages + API + app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages
-tests/unit tests/clinical-regression` (the deterministic clinical core + Studio core +
-HL7/durable/refill/triage core + golden dataset). PostgreSQL RLS is verified by the `rls` CI
-job.
+### Current status — Phase 6 (Analytics & Personalization)
+
+The feedback loop is closed — governed and approval-gated. Clinician actions
+(approve/edit/override/escalate) are captured with **edit-difference analysis** and
+aggregated into Executive / Clinical / Operations dashboards (spec §12). Personalization is a
+**recommendation engine, not an actuator**: derived preferences and configuration
+recommendations are **inert `pending` data** that take effect only through explicit human
+approval — no endpoint applies a change autonomously. A derived preference is validated
+against a safety-protected field set, so it **provably cannot weaken a safety constraint**
+(spec §6.4.3). Any cross-tenant analysis is **de-identified** and small cohort cells are
+**suppressed** before data leaves a tenant boundary (spec §12.5, §4.2).
+
+| Phase 6 deliverable | Where |
+|---|---|
+| Edit-difference analysis + feedback aggregation (spec §12) | `domains/analytics/core.py` (`edit_difference`, `aggregate_feedback`) |
+| Feedback capture (approve/edit/override/escalate), records only | `domains/feedback/` |
+| Executive / Clinical / Operations dashboards (spec §12) | `analytics.services.dashboards` |
+| Preference derivation that provably can't weaken safety (spec §6.4.3) | `core.derive_preferences` + `assert_preference_safe` |
+| Approval-gated config recommendations (inert until approved) | `analytics.services.derive_preferences` / `approve_recommendation` |
+| Cross-tenant de-identification + small-cell suppression (spec §12.5) | `core.deidentify` / `suppress_small_cells` |
+| Analytics + governance API (`/api/v1/feedback`, `/api/v1/analytics…`) | `apps/api/clinara/api_v1_analytics.py` |
+
+**All six delivery phases are implemented.** Run the tests: `cd apps/api && pytest` (results +
+Rule Studio + gateway + delivery + refills + messages + analytics + API + app-layer isolation
+on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the
+deterministic clinical core + Studio/HL7/durable/refill/triage/analytics core + golden
+dataset). PostgreSQL RLS is verified by the `rls` CI job.
 
 ---
 

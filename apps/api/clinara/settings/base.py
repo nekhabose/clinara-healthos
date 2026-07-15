@@ -57,9 +57,9 @@ DOMAIN_APPS = [
     "domains.refills",
     # Phase 5 — Patient Message Intelligence:
     "domains.messages",
-    # Phase 6+ (declared here as the code lands):
-    # "domains.feedback",
-    # "domains.analytics",
+    # Phase 6 — Analytics & Personalization:
+    "domains.feedback",
+    "domains.analytics",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PLATFORM_APPS + DOMAIN_APPS

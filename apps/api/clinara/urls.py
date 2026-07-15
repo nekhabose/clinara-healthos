@@ -15,4 +15,5 @@ urlpatterns = [
     path("api/v1/", include("clinara.api_v1_integrations")),  # Phase 3 — EHR Integration
     path("api/v1/", include("clinara.api_v1_refills")),  # Phase 4 — Refill Intelligence
     path("api/v1/", include("clinara.api_v1_messages")),  # Phase 5 — Message Intelligence
+    path("api/v1/", include("clinara.api_v1_analytics")),  # Phase 6 — Analytics & Personalization
 ]
