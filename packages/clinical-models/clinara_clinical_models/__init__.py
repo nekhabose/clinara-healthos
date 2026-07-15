@@ -7,19 +7,29 @@ protocol engine.
 
 from .canonical import (
     CanonicalClinicalEvent,
+    CanonicalEventType,
     CodeableConcept,
     ReferenceRange,
     SourceRef,
     TestResult,
 )
 from .context import ContextProvenance, ContextSnapshot
+from .decision import (
+    EvaluationTrace,
+    ProtocolEvaluation,
+    ResultDecision,
+)
 
 __all__ = [
     "CanonicalClinicalEvent",
+    "CanonicalEventType",
     "CodeableConcept",
     "ReferenceRange",
     "SourceRef",
     "TestResult",
     "ContextSnapshot",
     "ContextProvenance",
+    "ResultDecision",
+    "EvaluationTrace",
+    "ProtocolEvaluation",
 ]

@@ -21,13 +21,64 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ../../packages/shared-types
           pip install -e ../../packages/clinical-models
+          pip install -e ../../packages/terminology
+          pip install -e ../../packages/protocol-engine
           pip install -e ".[dev]"
       - name: Lint (ruff)
         run: ruff check .
       - name: Type check (mypy)
         run: mypy . || true   # tighten to blocking once domains are typed
-      - name: Test (pytest)
+      - name: Backend tests (SQLite; app-layer isolation, workflow, API)
         run: pytest
+      - name: Clinical core tests (engine, terminology, generation, golden dataset)
+        working-directory: .
+        run: PYTHONPATH=apps/api pytest packages/terminology/tests packages/protocol-engine/tests tests/unit tests/clinical-regression --import-mode=importlib
+
+  # Tenant-isolation gate (plan §2): verify PostgreSQL Row-Level Security actually blocks
+  # cross-tenant access, connected as the NON-superuser app role (superusers bypass RLS).
+  rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install workspace packages + api (+ psycopg)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ../../packages/shared-types
+          pip install -e ../../packages/clinical-models
+          pip install -e ../../packages/terminology
+          pip install -e ../../packages/protocol-engine
+          pip install -e ".[dev]" "psycopg[binary]>=3.1"
+      - name: Provision the non-superuser app role (RLS is enforced against it)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE clinara_app LOGIN CREATEDB PASSWORD 'clinara_app';"
+      - name: Tenant-isolation tests against PostgreSQL RLS
+        env:
+          CLINARA_TEST_DB: postgres
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: clinara
+          POSTGRES_USER: clinara_app
+          POSTGRES_PASSWORD: clinara_app
+        run: pytest tests/test_tenant_isolation.py -v
 
   web:
     runs-on: ubuntu-latest
@@ -42,6 +93,3 @@ jobs:
       - run: npm install
       - run: npm run lint --if-present
       - run: npm run build --if-present
-
-  # Release gates (spec §13.5) are added here as each phase lands:
-  # tenant-isolation, clinical-regression, mapping-validation, safety-rules.

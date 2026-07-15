@@ -135,8 +135,8 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 
 | Phase | Focus | Status |
 |---|---|---|
-| **Phase 0** | **Foundation** — tenant isolation (RLS), identity & RBAC, hash-chained audit, transactional outbox, canonical contracts, PHI-safe observability. | ✅ **Implemented (this repo)** |
-| **Phase 1** | **Results Intelligence MVP** — the full governed pipeline end-to-end for lab results, human-approval-required. | 🚧 In progress |
+| **Phase 0** | **Foundation** — tenant isolation (RLS), identity & RBAC, hash-chained audit, transactional outbox, canonical contracts, PHI-safe observability. | ✅ **Implemented** |
+| **Phase 1** | **Results Intelligence MVP** — the full governed pipeline end-to-end for lab results, human-approval-required. | ✅ **Implemented** |
 | **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ⬜ Planned |
 | **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ⬜ Planned |
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ⬜ Planned |
@@ -144,23 +144,39 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ⬜ Planned |
 | **GA** | Compliance attestation (HIPAA / SOC 2 Type II), DR drills, scale & performance SLOs. | ⬜ Planned |
 
-### Current status — Phase 0 (Foundation)
+### Current status — Phase 1 (Results Intelligence MVP)
 
-This repository is a tenant-isolated, auditable, observable platform skeleton. **No clinical
-decision logic ships yet** — that begins in Phase 1.
+The full governed pipeline runs end-to-end for lab results in **human-approval-required**
+mode: a FHIR result in → canonical model → immutable context snapshot → deterministic
+protocol decision → validated, constrained communication draft → clinician
+approve/edit/override/escalate — every step audited and replayable. Auto-delivery is
+architecturally absent; critical values can never be auto-resolved.
 
-| Deliverable | Where |
+The **deterministic clinical core is pure Python** (no framework, no database, no LLM) so it
+is exhaustively unit-tested; the Django layer is a thin persistence/API shell over it.
+
+| Phase 1 deliverable | Where |
 |---|---|
-| Tenancy hierarchy (Org → Site → Department → Practice) | `apps/api/domains/tenants/` |
-| Identity & RBAC (11 roles) | `apps/api/domains/identity/` |
-| Immutable, hash-chained audit | `apps/api/domains/audit/` |
-| Tenant-scoped base model + RLS | `apps/api/core/models.py`, `apps/api/core/rls.py` |
-| Transactional outbox (no silent loss) | `apps/api/core/outbox.py` |
-| Canonical event schema (§8.2) + context snapshot (§8.3) | `packages/clinical-models/` |
-| Domain event envelope (§7.5) | `packages/shared-types/` |
-| PHI-safe logging + tenant middleware | `apps/api/clinara/middleware/` |
-| Infra baseline (Terraform) | `infrastructure/terraform/` |
-| CI/CD | `.github/workflows/` |
+| LOINC→marker mapping, UCUM normalization (unsupported unit blocks; unknown code queues) | `packages/terminology/` |
+| Deterministic protocol engine + un-weakenable critical thresholds | `packages/protocol-engine/` |
+| Structured result decision (spec §6.1.5) + evaluation trace | `packages/clinical-models/decision.py` |
+| Versioned rule artifacts (YAML — rules are data, not code) | `clinical/protocols/` |
+| Immutable, hashed context builder (spec §8.3) | `apps/api/domains/context/core.py` |
+| Constrained LLM generation (approved template + facts only) | `apps/api/domains/generation/core.py` |
+| Output validation & safety gate + fixed-template fallback (spec §6.9.5/6) | `apps/api/domains/safety/core.py` |
+| Ingest → decide → persist → audit → events orchestration | `apps/api/domains/workflows/` |
+| FHIR sandbox ingestion + idempotent raw store | `apps/api/domains/integrations/` |
+| Clinician inbox + actions API (`/api/v1/workflows…`) | `apps/api/clinara/api_v1.py` |
+| Operations queue (failed / unmapped events) | `apps/api/domains/operations/` |
+| Golden dataset regression (spec §13.3) | `clinical/golden/` |
+
+**Phase 0 foundation** (tenancy + RLS, identity/RBAC, hash-chained audit, transactional
+outbox, canonical contracts, PHI-safe observability) underpins all of the above — see
+`apps/api/core/`, `apps/api/domains/{tenants,identity,audit}/`, and `packages/shared-types/`.
+
+Run the tests: `cd apps/api && pytest` (workflow + API + app-layer isolation on SQLite);
+`PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the deterministic
+clinical core + golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
 
 ---
 

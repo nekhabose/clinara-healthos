@@ -41,15 +41,16 @@ DOMAIN_APPS = [
     "domains.tenants",
     "domains.audit",
     "domains.operations",
-    # Phase 1+ (declared here as the code lands):
-    # "domains.integrations",
-    # "domains.terminology",
-    # "domains.clinical_data",
-    # "domains.context",
+    # Phase 1 — Results Intelligence MVP:
+    "domains.integrations",
+    "domains.terminology",
+    "domains.clinical_data",
+    "domains.context",
+    "domains.workflows",
+    "domains.generation",
+    "domains.safety",
+    # Phase 2+ (declared here as the code lands):
     # "domains.protocols",
-    # "domains.workflows",
-    # "domains.generation",
-    # "domains.safety",
     # "domains.delivery",
     # "domains.feedback",
     # "domains.analytics",
@@ -101,7 +102,9 @@ DATABASES = {
 
 # ---- Cache / Celery ----
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}}
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}
+}
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/2")
 
@@ -111,6 +114,14 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
 }
+
+# ---- Clinical content (versioned rule + template artifacts, plan Phase 1) ----
+# Rules are data, not code: the engine loads YAML from the repo. Overridable per env.
+_REPO_ROOT = BASE_DIR.parent.parent
+CLINICAL_RULES_DIR = env("CLINARA_RULES_DIR", default=str(_REPO_ROOT / "clinical" / "protocols"))
+CLINICAL_TEMPLATES_PATH = env(
+    "CLINARA_TEMPLATES_PATH", default=str(_REPO_ROOT / "clinical" / "templates" / "results.yaml")
+)
 
 # ---- i18n / static ----
 LANGUAGE_CODE = "en-us"

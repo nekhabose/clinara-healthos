@@ -1,6 +1,6 @@
 """Root URL configuration."""
 from django.http import JsonResponse
-from django.urls import path
+from django.urls import include, path
 
 
 def healthz(_request):
@@ -10,5 +10,5 @@ def healthz(_request):
 
 urlpatterns = [
     path("healthz", healthz, name="healthz"),
-    # path("api/v1/", include("clinara.api_v1")),  # wired up per phase
+    path("api/v1/", include("clinara.api_v1")),  # Phase 1 — Results Intelligence
 ]

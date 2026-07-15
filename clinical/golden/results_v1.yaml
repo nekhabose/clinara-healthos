@@ -1,0 +1,87 @@
+# Golden dataset for Results Intelligence (spec §13.3, plan Phase 1 testing focus).
+# Every case runs the full pipeline and asserts the deterministic decision. Cases cover the
+# spec §13.2 categories: positive, negative, boundary, missing, conflicting, high-risk
+# cohort, and unit-variant. This file GROWS every clinical phase (plan §4).
+
+- name: a1c_above_target_positive
+  input: {system: LOINC, code: 4548-4, value: 7.8, unit: "%", specialty: primary_care,
+          patient_facts: {patient.has_diabetes: true}, prior_value: 7.1}
+  expect: {status: decided, classification: clinician_review_required, priority: elevated,
+           automation_status: requires_clinician_approval, matched_rule: a1c_above_target,
+           reason_codes_include: [A1C_ABOVE_CONFIGURED_TARGET], validation_passed: true,
+           patient_message: true}
+
+- name: a1c_lower_boundary_inclusive
+  input: {system: LOINC, code: 4548-4, value: 7.0, unit: "%", specialty: endocrinology,
+          patient_facts: {patient.has_diabetes: true}}
+  expect: {classification: clinician_review_required, matched_rule: a1c_above_target}
+
+- name: a1c_normal_non_diabetic
+  input: {system: LOINC, code: 4548-4, value: 5.4, unit: "%",
+          patient_facts: {patient.has_diabetes: false}}
+  expect: {classification: normal, priority: normal, matched_rule: null,
+           reason_codes_include: [WITHIN_REFERENCE_RANGE]}
+
+- name: a1c_markedly_elevated_high_priority
+  input: {system: LOINC, code: 4548-4, value: 9.5, unit: "%", specialty: primary_care,
+          patient_facts: {patient.has_diabetes: true}}
+  expect: {classification: high_priority_review, priority: urgent,
+           automation_status: manual_review_required, matched_rule: a1c_markedly_elevated,
+           reason_codes_include: [A1C_MARKEDLY_ELEVATED]}
+
+- name: a1c_pregnancy_cohort_excludes_general_rule
+  input: {system: LOINC, code: 4548-4, value: 8.0, unit: "%", specialty: primary_care,
+          patient_facts: {patient.has_diabetes: true, patient.pregnancy: true}}
+  expect: {classification: clinician_review_required, matched_rule: null,
+           reason_codes_include: [OUTSIDE_REFERENCE_RANGE]}
+
+- name: potassium_critical_high_escalates
+  input: {system: LOINC, code: 2823-3, value: 6.8, unit: mmol/L}
+  expect: {classification: critical_escalation, priority: critical,
+           automation_status: manual_review_required,
+           reason_codes_include: [POTASSIUM_CRITICAL_HIGH], patient_message: false}
+
+- name: potassium_critical_low_escalates
+  input: {system: LOINC, code: 2823-3, value: 2.2, unit: mEq/L}
+  expect: {classification: critical_escalation, priority: critical,
+           reason_codes_include: [POTASSIUM_CRITICAL_LOW]}
+
+- name: potassium_normal
+  input: {system: LOINC, code: 2823-3, value: 4.2, unit: mmol/L}
+  expect: {classification: normal, priority: normal}
+
+- name: potassium_conflicting_requires_manual
+  input: {system: LOINC, code: 2823-3, value: 4.2, unit: mmol/L,
+          conflicting_facts: [specimen_hemolysis_suspected]}
+  expect: {classification: conflicting_data, automation_status: manual_review_required}
+
+- name: glucose_critical_high
+  input: {system: LOINC, code: 2345-7, value: 520, unit: mg/dL}
+  expect: {classification: critical_escalation, reason_codes_include: [GLUCOSE_CRITICAL_HIGH]}
+
+- name: glucose_unit_variant_mmol_normal
+  input: {system: LOINC, code: 2345-7, value: 5.0, unit: mmol/L}
+  expect: {classification: normal}
+
+- name: glucose_unsupported_unit_blocks
+  input: {system: LOINC, code: 2345-7, value: 5.0, unit: g/L}
+  expect: {classification: unsupported, automation_status: blocked_unsupported,
+           reason_codes_include: [UNSUPPORTED_UNIT], patient_message: false}
+
+- name: creatinine_umol_conversion_normal
+  input: {system: LOINC, code: 2160-0, value: 88.42, unit: umol/L}
+  expect: {classification: normal}
+
+- name: egfr_critical_low
+  input: {system: LOINC, code: 33914-3, value: 10, unit: mL/min/1.73m2}
+  expect: {classification: critical_escalation, reason_codes_include: [EGFR_CRITICAL_LOW]}
+
+- name: ldl_above_target_routine
+  input: {system: LOINC, code: 13457-7, value: 160, unit: mg/dL}
+  expect: {classification: routine_follow_up, matched_rule: ldl_above_target,
+           reason_codes_include: [LDL_ABOVE_TARGET], validation_passed: true,
+           patient_message: true}
+
+- name: unknown_code_parks_on_queue
+  input: {system: LOINC, code: 9999-9, value: 1.0, unit: mg/dL}
+  expect: {status: unmapped_code, queue_signal: unmapped_code}

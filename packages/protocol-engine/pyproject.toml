@@ -1,9 +1,15 @@
 [project]
 name = "clinara-protocol-engine"
 version = "0.0.0"
-description = "Clinara HealthOS — protocol-engine"
+description = "Clinara HealthOS — deterministic protocol engine"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2"]
+dependencies = [
+  "pydantic>=2",
+  "PyYAML>=6",
+  "clinara-shared-types",
+  "clinara-clinical-models",
+  "clinara-terminology",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,42 @@
+# Approved communication templates (spec §6.9.4 — the LLM may only fill/rewrite these).
+# Placeholders are filled from STRUCTURED FACTS ONLY; no chart free-text is interpolated.
+# required_warnings must appear verbatim in the rendered patient message (validation gate).
+
+diabetes_a1c_above_target_v1:
+  version: 1
+  reading_level_max: 8
+  required_warnings:
+    - "This is general information, not a diagnosis."
+  patient_body: |
+    Your recent {marker_display} result was {value} {unit}, which is above your target range.
+    Your care team will review this result and contact you about next steps.
+    This is general information, not a diagnosis.
+  clinician_body: |
+    {marker_display}: {value} {unit} (prior {prior}, trend {trend}) — above configured target.
+    Recommended action: {action}. Reason codes: {reason_codes}.
+
+diabetes_a1c_high_v1:
+  version: 1
+  reading_level_max: 8
+  required_warnings:
+    - "This is general information, not a diagnosis."
+  patient_body: |
+    Your recent {marker_display} result was {value} {unit}. Your care team wants to review
+    this with you soon. Please expect a message or call about next steps.
+    This is general information, not a diagnosis.
+  clinician_body: |
+    {marker_display}: {value} {unit} (prior {prior}, trend {trend}) — markedly elevated.
+    Higher-priority review. Reason codes: {reason_codes}.
+
+ldl_above_target_v1:
+  version: 1
+  reading_level_max: 8
+  required_warnings:
+    - "This is general information, not a diagnosis."
+  patient_body: |
+    Your recent {marker_display} result was {value} {unit}, which is above the general target.
+    Your care team will review it and follow up if any change is needed.
+    This is general information, not a diagnosis.
+  clinician_body: |
+    {marker_display}: {value} {unit} (prior {prior}, trend {trend}) — above target.
+    Recommended action: {action}. Reason codes: {reason_codes}.

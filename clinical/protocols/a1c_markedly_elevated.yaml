@@ -1,0 +1,31 @@
+# Markedly elevated A1C — higher-priority review (Phase 1).
+id: a1c_markedly_elevated
+version: 1
+marker: hemoglobin_a1c
+scope:
+  specialties:
+    - primary_care
+    - endocrinology
+when:
+  all:
+    - fact: patient.has_diabetes
+      operator: equals
+      value: true
+    - fact: lab.a1c
+      operator: greater_than_or_equal
+      value: 9.0
+then:
+  classification: high_priority_review
+  recommended_action: clinician_review
+  patient_template: diabetes_a1c_high_v1
+  clinician_context:
+    - prior_a1c
+    - diabetes_medications
+    - last_diabetes_visit
+  reason_codes:
+    - A1C_MARKEDLY_ELEVATED
+safety:
+  requires_manual_review: true
+  excluded_when:
+    - patient.pregnancy
+    - patient.pediatric_patient

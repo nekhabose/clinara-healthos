@@ -20,7 +20,14 @@ current_tenant_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 def set_db_tenant(tenant_id: str | None) -> None:
-    """Pin the tenant on the DB session for RLS. Parameterized to avoid injection."""
+    """Pin the tenant on the DB session for RLS. Parameterized to avoid injection.
+
+    PostgreSQL-only: RLS and ``set_config`` do not exist on other backends (e.g. the SQLite
+    test DB), so this is a no-op there. App-layer tenant filtering still applies everywhere;
+    RLS is the production-Postgres defense-in-depth layer.
+    """
+    if connection.vendor != "postgresql":
+        return
     with connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.current_tenant', %s, false)", [tenant_id or ""])
 

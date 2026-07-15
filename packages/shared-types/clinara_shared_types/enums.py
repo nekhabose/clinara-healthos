@@ -57,3 +57,38 @@ class MessageUrgency(str, Enum):
     ROUTINE_CLINICAL = "routine_clinical"
     ADMINISTRATIVE = "administrative"
     INFORMATIONAL = "informational"
+
+
+class Priority(str, Enum):
+    """Result priority band (spec §6.1.5 ``priority``). Drives queue placement."""
+
+    NORMAL = "normal"
+    ELEVATED = "elevated"
+    URGENT = "urgent"
+    CRITICAL = "critical"
+
+
+class AutomationStatus(str, Enum):
+    """What may happen to a decision without further computation (spec §6.1.5).
+
+    Phase 1 ships human-approval-required only; auto-delivery is architecturally absent.
+    ``suppressed_missing_context`` and ``blocked_unsupported`` are safety states that can
+    never be auto-resolved (spec §6.1.6).
+    """
+
+    REQUIRES_CLINICIAN_APPROVAL = "requires_clinician_approval"
+    MANUAL_REVIEW_REQUIRED = "manual_review_required"
+    SUPPRESSED_MISSING_CONTEXT = "suppressed_missing_context"
+    BLOCKED_UNSUPPORTED = "blocked_unsupported"
+
+
+# Recommended-action vocabulary (spec §6.1.5 ``recommended_action``). Rules emit these as
+# strings; the constants document the governed set without forcing an enum on rule authors.
+class RecommendedAction:
+    NONE = "none"
+    REPEAT_TEST = "repeat_test"
+    EVALUATE_CURRENT_PLAN = "evaluate_current_plan"
+    ROUTINE_FOLLOW_UP = "routine_follow_up"
+    CLINICIAN_REVIEW = "clinician_review"
+    ESCALATE_IMMEDIATELY = "escalate_immediately"
+    REQUEST_MANUAL_REVIEW = "request_manual_review"
