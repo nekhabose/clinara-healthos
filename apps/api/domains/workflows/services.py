@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from functools import lru_cache
 from typing import Any
 
 from clinara_clinical_models import ContextProvenance, ContextSnapshot
-from clinara_protocol_engine import Rule, evaluate, load_rules
+from clinara_protocol_engine import evaluate
 from clinara_shared_types import AutomationStatus, EventType, ResultClassification
 from clinara_terminology import CanonicalMarker
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -29,6 +27,7 @@ from domains.context.core import snapshot_hash
 from domains.context.models import ContextSnapshotRecord
 from domains.generation.services import get_templates
 from domains.operations import services as operations
+from domains.specialties import services as specialties
 from domains.terminology import services as terminology
 
 from .core import run_result_pipeline
@@ -43,9 +42,16 @@ from .models import (
 )
 
 
-@lru_cache(maxsize=1)
-def _rules() -> tuple[Rule, ...]:
-    return tuple(load_rules(settings.CLINICAL_RULES_DIR))
+def _rules(tenant_id: str, specialty: str | None):
+    """The rule set the engine evaluates for this tenant (plan Phase 10).
+
+    Global Phase 1 base rules composed with every specialty protocol pack, each bound to this
+    tenant's effective thresholds (pack defaults overlaid with any per-practice override). The
+    composition is deterministic and tenant-scoped, so a decision replays from the stored
+    snapshot + the tenant's current threshold policy — and a practice can retune a threshold
+    with no code change (``domains/specialties``).
+    """
+    return specialties.resolve_rules(tenant_id, specialty)
 
 
 def _bind_context(tenant_id: str, correlation: str) -> None:
@@ -114,7 +120,7 @@ def process_inbound(message) -> WorkflowInstance | None:
         result = run_result_pipeline(
             tenant_id=tenant_id, patient_id=patient_ext, system=system, code=code,
             value=value, unit=unit, observed_at=observed_at, now=now,
-            rules=list(_rules()), templates=get_templates(),
+            rules=list(_rules(tenant_id, specialty)), templates=get_templates(),
             patient_facts=patient_facts, prior_value=prior,
             ref_low=ref.get("low"), ref_high=ref.get("high"),
             specialty=specialty, source_record_ids=[message.idempotency_key],
@@ -290,7 +296,8 @@ def replay(workflow_id: str, *, tenant_id: str) -> dict[str, Any]:
     marker = CanonicalMarker(record.facts["lab.marker"]) if record.facts.get("lab.marker") \
         else CanonicalMarker(stored.marker)
     specialty = record.facts.get("context.specialty")
-    replayed = evaluate(snapshot, marker=marker, rules=list(_rules()), specialty=specialty)
+    replayed = evaluate(snapshot, marker=marker, rules=list(_rules(tenant_id, specialty)),
+                        specialty=specialty)
     return {
         "matches": replayed.decision.model_dump(mode="json") == stored.decision,
         "stored": stored.decision,

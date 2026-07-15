@@ -24,22 +24,18 @@ from clinara_clinical_models import (
     ResultDecision,
 )
 from clinara_shared_types import AutomationStatus, Priority, RecommendedAction, ResultClassification
-from clinara_terminology import CanonicalMarker
+from clinara_terminology import LAB_FACT_ALIAS, CanonicalMarker
 
 from .critical import critical_breach
 from .operators import apply_operator
 from .schema import BoolCondition, Condition, LeafCondition, Rule
 
-# Fact alias each canonical marker's primary value is published under, so rules can be
-# authored against readable names (e.g. ``lab.a1c``) instead of enum values.
-LAB_FACT_ALIAS: dict[CanonicalMarker, str] = {
-    CanonicalMarker.HEMOGLOBIN_A1C: "lab.a1c",
-    CanonicalMarker.GLUCOSE: "lab.glucose",
-    CanonicalMarker.CREATININE: "lab.creatinine",
-    CanonicalMarker.EGFR: "lab.egfr",
-    CanonicalMarker.POTASSIUM: "lab.potassium",
-    CanonicalMarker.LDL_CHOLESTEROL: "lab.ldl",
-}
+# ``LAB_FACT_ALIAS`` — the fact name each canonical marker's primary value is published under,
+# so rules read against friendly names (e.g. ``lab.a1c``) — is DERIVED from the terminology
+# catalog (``MarkerSpec.fact_alias``) rather than hand-maintained here. That makes adding a
+# marker for a new specialty a pure data change: the crown-jewel evaluator is never edited to
+# grow protocol breadth (plan Phase 10). Re-exported for backward compatibility.
+__all_alias__ = LAB_FACT_ALIAS  # noqa: F841 (documents the re-export intent)
 
 _PRIORITY_BY_CLASSIFICATION: dict[ResultClassification, Priority] = {
     ResultClassification.NORMAL: Priority.NORMAL,

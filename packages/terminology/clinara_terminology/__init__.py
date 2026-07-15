@@ -12,6 +12,7 @@ from .mapping import (
     normalize_result,
 )
 from .markers import (
+    LAB_FACT_ALIAS,
     LOINC_MAP,
     MARKER_SPECS,
     CanonicalMarker,
@@ -32,6 +33,7 @@ __all__ = [
     "CanonicalMarker",
     "MarkerSpec",
     "MARKER_SPECS",
+    "LAB_FACT_ALIAS",
     "LOINC_MAP",
     "NormalizedResult",
     "UnknownCodeError",

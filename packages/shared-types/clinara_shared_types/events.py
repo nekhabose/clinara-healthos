@@ -55,6 +55,9 @@ class EventType(str, Enum):
     CODING_SUGGESTION_CONFIRMED = "CodingSuggestionConfirmed"
     CODING_SUGGESTION_REJECTED = "CodingSuggestionRejected"
     CODING_SUGGESTION_EXPORTED = "CodingSuggestionExported"
+    # Phase 10 — Specialty Protocol Breadth (per-tenant threshold customization):
+    SPECIALTY_THRESHOLD_UPDATED = "SpecialtyThresholdUpdated"
+    SPECIALTY_THRESHOLD_RESET = "SpecialtyThresholdReset"
     # Phase 2 — Clinical Rule Studio lifecycle (spec §6.5.4/§6.5.8):
     PROTOCOL_SIMULATED = "ProtocolSimulated"
     PROTOCOL_APPROVED = "ProtocolApproved"

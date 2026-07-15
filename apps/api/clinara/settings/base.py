@@ -64,6 +64,8 @@ DOMAIN_APPS = [
     "domains.analytics",
     # Phase 9 — Billing & Coding Intelligence:
     "domains.coding",
+    # Phase 10 — Specialty Protocol Breadth:
+    "domains.specialties",
     # GA hardening — emergency controls, reliability, DR, compliance:
     "domains.killswitch",
     "domains.reliability",
@@ -136,6 +138,13 @@ REST_FRAMEWORK = {
 # Rules are data, not code: the engine loads YAML from the repo. Overridable per env.
 _REPO_ROOT = BASE_DIR.parent.parent
 CLINICAL_RULES_DIR = env("CLINARA_RULES_DIR", default=str(_REPO_ROOT / "clinical" / "protocols"))
+# Phase 10 — parameterized specialty protocol packs (loaded + threshold-bound per tenant by
+# domains/specialties). A subdirectory of the rules dir, so the base loader (top-level glob)
+# never picks up unbound {param: ...} templates.
+CLINICAL_SPECIALTY_PACKS_DIR = env(
+    "CLINARA_SPECIALTY_PACKS_DIR",
+    default=str(_REPO_ROOT / "clinical" / "protocols" / "specialties"),
+)
 CLINICAL_TEMPLATES_PATH = env(
     "CLINARA_TEMPLATES_PATH", default=str(_REPO_ROOT / "clinical" / "templates" / "results.yaml")
 )

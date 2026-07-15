@@ -60,6 +60,42 @@ _CONVERTERS: dict[CanonicalMarker, dict[str, Callable[[float], float]]] = {
     CanonicalMarker.LDL_CHOLESTEROL: {
         "mmol/l": lambda v: v * 38.67,
     },
+    # --- Phase 10 breadth: additional recognised alternate units ---
+    # HDL / total cholesterol: mmol/L -> mg/dL (x38.67).
+    CanonicalMarker.HDL_CHOLESTEROL: {
+        "mmol/l": lambda v: v * 38.67,
+    },
+    CanonicalMarker.TOTAL_CHOLESTEROL: {
+        "mmol/l": lambda v: v * 38.67,
+    },
+    # Triglycerides: mmol/L -> mg/dL (x88.57).
+    CanonicalMarker.TRIGLYCERIDES: {
+        "mmol/l": lambda v: v * 88.57,
+    },
+    # Calcium: mmol/L -> mg/dL (x4.008).
+    CanonicalMarker.CALCIUM: {
+        "mmol/l": lambda v: v * 4.008,
+    },
+    # Hemoglobin: g/L -> g/dL (/10).
+    CanonicalMarker.HEMOGLOBIN: {
+        "g/l": lambda v: v / 10.0,
+    },
+    # TSH: uIU/mL == mIU/L (identity — same magnitude, alternate notation).
+    CanonicalMarker.TSH: {
+        "uiu/ml": lambda v: v,
+        "µiu/ml": lambda v: v,
+    },
+    # Platelets / WBC: x10^3/uL == x10^9/L (identity).
+    CanonicalMarker.PLATELETS: {
+        "10^3/ul": lambda v: v,
+        "10*3/ul": lambda v: v,
+        "k/ul": lambda v: v,
+    },
+    CanonicalMarker.WBC: {
+        "10^3/ul": lambda v: v,
+        "10*3/ul": lambda v: v,
+        "k/ul": lambda v: v,
+    },
 }
 
 

@@ -146,6 +146,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 7** | **Real EMR Connectivity** — SMART-on-FHIR write-back (`Task`/`Communication`), retrying/idempotent direct-release, degraded-channel alert. Closes gaps G2 + G3 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live sandbox pending) |
 | **Phase 8** | **EHR-Embedded Clinician Surface** — SMART-on-FHIR EHR launch + OIDC identity bridge (no separate login), clinician chart-context panel, embedded surface, Epic/Athena marketplace manifests. Closes gaps G4 + G5 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live marketplace pending) |
 | **Phase 9** | **Billing & Coding Intelligence** — deterministic revenue-integrity module: documented-uncoded / HCC-gap / specificity-upgrade detectors over the canonical snapshot, evidence-linked, human-confirmed review queue, export-gated on confirmation, acceptance/override fed into the Phase 6 loop. Closes gap G1 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
+| **Phase 10** | **Specialty Protocol Breadth** — canonical catalog grown to 25 markers; 7 validated, parameterized protocol packs covering 34 ambulatory specialties; per-tenant threshold customization bound as data at load time and gated so it can never weaken safety. No engine change. Closes gap G6 in [`gaps.md`](./gaps.md). | ✅ **Implemented** |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
 
@@ -459,6 +460,66 @@ across specialties extends it through the same governed authoring path in Phase 
 | HTTP surface (`/api/v1/coding/analyze`, `/suggestions`, `/{id}/confirm|reject|export`) | `apps/api/clinara/api_v1_coding.py` |
 | Acceptance/override fed into the Phase 6 governed dashboards | `apps/api/domains/analytics/services.py` (workflow-type loop) |
 | Tests (each detector incl. negative cases, export gate, no-auto-apply, idempotency, tenant isolation, analytics hook) | `apps/api/tests/test_phase9_coding.py`, `apps/api/tests/test_api_coding.py` |
+
+---
+
+### Current status — Phase 10 (Specialty Protocol Breadth)
+
+Phase 10 closes gap **G6** in [`gaps.md`](./gaps.md) — Elaborate's *"rules-based protocols
+across 30+ ambulatory specialties."* It is a **content + governance** phase, delivered under the
+platform invariant *no model-driven clinical decision*: the crown-jewel evaluator
+(`clinara_protocol_engine`) is **not touched**. Breadth is data and governance, not new engine
+code.
+
+**The catalog grew from 6 markers to 25.** `packages/terminology/markers.py` now carries thyroid
+(TSH, free T4), extended lipids (HDL, triglycerides, total cholesterol), a hepatic panel (ALT,
+AST, bilirubin, alk phos), hematology (hemoglobin, platelets, WBC), coagulation (INR),
+inflammatory (CRP, ESR), and electrolytes (sodium, calcium, BUN) — each with a canonical unit,
+reference range, seed LOINC codes, and unit conversions. `LAB_FACT_ALIAS` is now **derived** from
+the catalog (`MarkerSpec.fact_alias`), so **adding a marker is a pure data change** — the reason
+the engine needs no edit to grow breadth. New conventional adult critical bands (sodium, calcium,
+hemoglobin, platelets, WBC, INR) extend the un-weakenable safety floor.
+
+**Seven parameterized protocol packs cover 34 ambulatory specialties.** Under
+`clinical/protocols/specialties/`, each pack is versioned data: specialty-scoped, deterministic
+rules whose thresholds are `{param: <name>}` placeholders with pack defaults, plus required
+positive / negative / **critical-value** test cases. Their `scope.specialties` collectively cover
+34 specialties — a *tested* coverage claim (`services.coverage_report()` → 34/34), not a marketing
+one.
+
+**Two guarantees, enforced in code (`domains/specialties`):**
+
+- **Every pack passes the Rule Studio activation gate.** `core.validate_pack` binds every rule,
+  asserts no rule down-classifies a critical value (`assert_cannot_weaken_safety`), and runs every
+  required test case (`run_test_cases`) — the same gate `domains/protocols` enforces at deploy.
+  Pack rules are authored bounded *above* the hard critical floor, so a critical value (Hgb < 6,
+  INR > 5, Na < 120, …) escalates first and no pack rule can ever match it.
+- **Per-tenant threshold customization with no code change — and it can never weaken safety.** A
+  `SpecialtyThresholdPolicy` lets a practice retune a threshold; the override is *data* applied by
+  `bind_parameters` at rule-load time (no rule YAML edited, no code shipped). `set_threshold`
+  re-runs the **whole pack activation gate** with the proposed value before persisting, so an
+  override that would down-classify a critical value, break a required test, or name an undeclared
+  parameter is rejected (HTTP 422). `resolve_rules` composes the base rules with each pack bound to
+  the tenant's effective thresholds — the exact, replayable rule set the engine evaluates, wired
+  into `domains/workflows/services.py`.
+
+*Proven end-to-end: the same TSH result yields a different governed decision for two practices
+purely because one customized its threshold (`test_end_to_end_two_tenants_get_different_
+classifications`, driven through the real ingest pipeline). 32 dedicated tests (23 domain/API + 9
+catalog/critical); full suite green — 176 API + package tests passed. Authoring playbook:
+[`docs/protocols/specialty-pack-authoring.md`](./docs/protocols/specialty-pack-authoring.md).*
+
+| Phase 10 deliverable | Where |
+|---|---|
+| Catalog expansion (25 markers, fact-alias derivation, unit conversions) | `packages/terminology/markers.py`, `…/units.py` |
+| New critical bands (Na, Ca, Hgb, Plt, WBC, INR) | `packages/protocol-engine/clinara_protocol_engine/critical.py` |
+| 7 parameterized specialty protocol packs (34-specialty coverage) | `clinical/protocols/specialties/*.yaml` |
+| Ambulatory specialty registry (34 specialties as data) | `apps/api/domains/specialties/catalog.py` |
+| Pure pack mechanics (`bind_parameters`, `validate_pack`, `coverage`) | `apps/api/domains/specialties/core.py` |
+| Governed per-tenant threshold policy + rule resolver | `apps/api/domains/specialties/services.py`, `…/models.py`, `…/migrations/0002_enable_rls.py` |
+| Wired into the engine path (base rules + tenant-bound packs) | `apps/api/domains/workflows/services.py` |
+| HTTP surface (`/api/v1/specialties`, `/packs`, `/packs/{key}/thresholds`) | `apps/api/clinara/api_v1_specialties.py` |
+| Tests (pack gate, coverage, safety guard, per-tenant customization, tenant isolation, API) | `apps/api/tests/test_phase10_specialties.py`, `…/test_api_specialties.py`, `packages/**/test_phase10_*.py` |
 
 ---
 

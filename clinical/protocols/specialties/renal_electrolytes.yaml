@@ -1,0 +1,78 @@
+# Renal / electrolytes pack (Phase 10 — closes gaps.md G6).
+# BUN elevation, hyponatremia, and hypercalcemia bands. Hyponatremia is bounded above the
+# <120 critical floor; hypercalcemia below the >13 critical floor — a pack rule can never
+# claim a non-critical outcome for a critical electrolyte value.
+specialty: renal_electrolytes
+display_name: Renal / electrolytes
+version: 1
+evidence:
+  - "KDIGO Clinical Practice Guidelines"
+  - "Endocrine Society Hypercalcemia Guidance"
+parameters:
+  bun_upper: 20.0         # mg/dL — upper limit of normal
+  na_low: 135.0           # mmol/L — hyponatremia threshold
+  ca_high: 10.5           # mg/dL — hypercalcemia threshold
+_scope: &renal_scope
+  - nephrology
+  - transplant_nephrology
+  - primary_care
+  - family_medicine
+  - internal_medicine
+  - geriatrics
+  - urology
+  - cardiology
+  - endocrinology
+  - psychiatry
+rules:
+  - id: bun_elevated
+    version: 1
+    marker: bun
+    scope: {specialties: *renal_scope}
+    when:
+      all:
+        - {fact: lab.bun, operator: greater_than, value: {param: bun_upper}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 90
+      reason_codes: [BUN_ELEVATED]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: hyponatremia
+    version: 1
+    marker: sodium
+    scope: {specialties: *renal_scope}
+    when:
+      all:
+        - {fact: lab.sodium, operator: greater_than_or_equal, value: 120.0}
+        - {fact: lab.sodium, operator: less_than, value: {param: na_low}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [HYPONATREMIA]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: hypercalcemia
+    version: 1
+    marker: calcium
+    scope: {specialties: *renal_scope}
+    when:
+      all:
+        - {fact: lab.calcium, operator: greater_than, value: {param: ca_high}}
+        - {fact: lab.calcium, operator: less_than_or_equal, value: 13.0}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [HYPERCALCEMIA]
+    safety: {requires_manual_review: false, excluded_when: []}
+test_cases:
+  - {name: bun_elevated_flags, marker: bun, specialty: nephrology,
+     facts: {lab.bun: 34.0}, expected: routine_follow_up}
+  - {name: bun_normal_silent, marker: bun, specialty: nephrology,
+     facts: {lab.bun: 14.0}, expected: normal}
+  - {name: hyponatremia_flags, marker: sodium, specialty: nephrology,
+     facts: {lab.sodium: 128.0}, expected: clinician_review_required}
+  - {name: sodium_critical_escalates, marker: sodium, specialty: nephrology,
+     facts: {lab.sodium: 115.0}, expected: critical_escalation}
+  - {name: hypercalcemia_flags, marker: calcium, specialty: endocrinology,
+     facts: {lab.calcium: 11.4}, expected: clinician_review_required}
+  - {name: calcium_normal_silent, marker: calcium, specialty: endocrinology,
+     facts: {lab.calcium: 9.4}, expected: normal}

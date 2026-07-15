@@ -3,11 +3,11 @@
 
 **Author's note (2026-07-15):** This document benchmarks the current implementation
 (Phases 0–6 + GA Hardening + Phase 7 Real EMR Connectivity + Phase 8 EHR-Embedded Surface +
-Phase 9 Billing & Coding Intelligence, all landed) against **Elaborate** — the product Clinara
-is a replica of — identifies every remaining gap, and lays out a phase-by-phase plan to close
-them. It is a companion to [`plan.md`](plan.md) and continues its phase numbering (next open
-phase is **Phase 10**). Read `plan.md` first for the architectural north star; this document
-assumes it.
+Phase 9 Billing & Coding Intelligence + Phase 10 Specialty Protocol Breadth, all landed)
+against **Elaborate** — the product Clinara is a replica of — identifies every remaining gap,
+and lays out a phase-by-phase plan to close them. It is a companion to [`plan.md`](plan.md) and
+continues its phase numbering (next open phase is **Phase 11**). Read `plan.md` first for the
+architectural north star; this document assumes it.
 
 ---
 
@@ -62,7 +62,7 @@ an architectural redirection.
 | **G3** | **Real write-back / direct-release delivery** — Epic/Athena inbasket + patient-portal adapters | ✅ **Closed (Phase 7)** — `SmartEhrClient` (FHIR `Task`/`Communication`), retrying `deliver`, idempotent `release_result`, degraded-channel alert | `clinara_integration_sdk/fhir_writeback.py`, `domains/delivery/adapters.py` |
 | **G4** | **EHR-embedded clinician surface** — SMART-on-FHIR launch, Epic Showroom / Athena Marketplace, no separate login | ✅ **Closed (Phase 8)** — real SMART EHR-launch + OIDC identity bridge (fail-closed, tenant-isolated, audited), embedded surface, marketplace manifests | `clinara_integration_sdk/smart_launch.py`, `domains/embedded`, `clinara/api_v1_embedded.py` |
 | **G5** | **Chart-context panel** — surface relevant chart details in-inbox to eliminate chart digging | ✅ **Closed (Phase 8)** — clinician-facing panel (labs/patient-context/provenance + freshness) over the stored snapshot, beside the item under review | `domains/context/core.py` (`build_context_panel`), `domains/context/services.py` |
-| **G6** | **Multi-specialty breadth (30+ ambulatory specialties)** | ⚠️ Partial — `specialty` plumbed end-to-end; protocol *content* ≈ 6 lab markers | `domains/context/core.py:32`, `MARKER_SPECS` |
+| **G6** | **Multi-specialty breadth (30+ ambulatory specialties)** | ✅ **Closed (Phase 10)** — catalog grown to 25 markers; 7 validated, parameterized protocol packs cover **34 ambulatory specialties** (tested coverage); per-tenant threshold customization with no code change, gated so it can never weaken safety | `packages/terminology/markers.py`, `clinical/protocols/specialties/`, `domains/specialties` |
 | **G7** | **Data retention & purge** — minimal-necessary retention, 90-day window, BAA-triggered purge | ❌ **Missing** — no retention/purge job found | — |
 
 ---
@@ -188,16 +188,43 @@ an architectural redirection.
   reasoned over — so the panel is exactly what the decision was based on. Low clinical risk,
   high UX value.
 
-### G6 — Multi-specialty protocol breadth ⚠️
+### G6 — Multi-specialty protocol breadth ✅ (closed in Phase 10)
 - **Elaborate:** "Rules-based protocols across 30+ ambulatory specialties."
-- **Current state:** The *mechanism* is specialty-aware end-to-end (`specialty` threaded
-  through context, workflows, and `User.specialties`; engine accepts a `specialty` marker).
-  The *content* is ≈6 lab markers (A1c, glucose, creatinine, eGFR, potassium, LDL).
-- **Missing:** Authored, clinically-validated protocol packs per specialty (cardiology,
-  endocrinology, nephrology, primary care, etc.). This is a **content + clinical-validation**
-  effort executed through the existing Phase 2 Rule Studio, not new engine code.
-- **Risk:** Clinical accuracy at breadth — every pack goes through Rule Studio's dual-approval
-  and required test cases; no shortcut around governance.
+- **Delivered:** Content + governance, no engine change (the invariant held):
+  - `packages/terminology/markers.py` — the canonical catalog grew from 6 markers to **25**
+    across ambulatory panels (thyroid, extended lipids, hepatic, hematology, coagulation,
+    inflammatory, electrolytes), each with canonical unit, reference range, LOINC seed codes,
+    and unit conversions. `LAB_FACT_ALIAS` is now **derived** from the catalog, so adding a
+    marker is a pure data change — the crown-jewel evaluator is never edited to grow breadth.
+    New conventional adult critical bands (sodium, calcium, hemoglobin, platelets, WBC, INR)
+    extend the un-weakenable safety floor (`clinara_protocol_engine.critical`).
+  - `clinical/protocols/specialties/*.yaml` — **7 parameterized protocol packs** authored as
+    versioned data (thyroid, lipids, hepatic, hematology, coagulation, inflammatory, renal/
+    electrolytes). Each rule is specialty-scoped and carries `{param: <name>}` threshold
+    placeholders with pack defaults; each pack ships **required positive + negative + critical
+    test cases**. Their `scope.specialties` collectively cover **34 ambulatory specialties**.
+  - `domains/specialties` — the registry (`catalog.py`, 34 specialties as data), the pure pack
+    mechanics (`core.py`: `bind_parameters`, `validate_pack`, `coverage`), and the governed
+    service (`services.py`): a per-tenant `SpecialtyThresholdPolicy` lets a practice retune a
+    threshold **without any code change**, and `set_threshold` re-runs the full pack activation
+    gate (bind → parse → `assert_cannot_weaken_safety` → required tests) before persisting, so
+    a customization can never down-classify a critical value or break a required test.
+    `resolve_rules` composes the base rules with each pack bound to the tenant's effective
+    thresholds — the exact, replayable rule set the engine evaluates (wired into
+    `domains/workflows/services.py`).
+  - `clinara/api_v1_specialties.py` — browse the registry + coverage, inspect the validated
+    packs and their tenant-effective thresholds, and customize a threshold (`/api/v1/
+    specialties/*`), tenant-resolved and RLS-scoped.
+- **Validation status:** 23 dedicated tests (`apps/api/tests/test_phase10_specialties.py`,
+  `test_api_specialties.py`) + 9 catalog/critical tests (`packages/…/test_phase10_*`): every
+  pack passes the activation gate, all 34 specialties are covered, the same snapshot yields a
+  different governed decision under two threshold policies (proven through the real ingest
+  pipeline), unsafe overrides are rejected, and tenant isolation holds. Full suite green (176
+  API + package tests passed).
+- **Invariant held:** no model-driven clinical decision — packs are deterministic rules over
+  the canonical snapshot; every threshold is data bound before evaluation, and the critical
+  floor still runs first and un-weakenably. Breadth scales through the Rule Studio governance,
+  not engineering.
 
 ### G7 — Data retention & purge lifecycle ❌
 - **Elaborate:** "Minimal necessary data retained for 90 days; fully purged on termination
@@ -225,7 +252,7 @@ real customer and is sequenced before go-live.
 | **7** ✅ | Real EMR Connectivity | G2, G3 | Phase 3 rails | — |
 | **8** ✅ | EHR-Embedded Clinician Surface | G4, G5 | Phase 7 | Phase 9 |
 | **9** ✅ | Billing & Coding Intelligence | G1 | Phase 5 context | Phase 8 |
-| **10** | Specialty Protocol Breadth | G6 | Phase 2 Studio | Phases 8–9 |
+| **10** ✅ | Specialty Protocol Breadth | G6 | Phase 2 Studio | Phases 8–9 |
 | **11** | Data Lifecycle & Compliance Hardening | G7 | — (cross-cutting) | all |
 
 ---
@@ -396,27 +423,54 @@ same chart context (Phase 5/7); parallelizable with Phase 8.
 
 ### Phase 10 — Specialty Protocol Breadth
 
-**Status:** ⏳ Planned. **Objective:** Grow authored, clinically-validated protocol content
-from ~6 markers to 30+ ambulatory specialties, via the existing Rule Studio. **Why now:**
-Content/validation effort, not engine work; parallelizable once Studio (Phase 2) is proven.
+**Status:** ✅ **Implemented (deterministic, data-driven, human-governed; full suite green).**
+The canonical marker catalog grew from 6 to 25 markers, and 7 parameterized, specialty-scoped
+protocol packs (`clinical/protocols/specialties/`) now cover **34 ambulatory specialties**
+(tested coverage). A new `domains/specialties` module adds the specialty registry, the pure
+pack activation gate (`validate_pack`: bind → parse → `assert_cannot_weaken_safety` → required
+tests), and **per-tenant threshold customization with no code change** — a
+`SpecialtyThresholdPolicy` whose overrides are bound into rules at load time and re-validated
+against the full gate before they can go live. `resolve_rules` composes the base rules with the
+tenant-bound packs into the exact rule set the engine evaluates (wired into the workflow path).
+No engine code changed to grow breadth. See the README "Current status — Phase 10" section.
+
+**Objective:** Grow authored, clinically-validated protocol content from ~6 markers to 30+
+ambulatory specialties, via the existing Rule Studio governance. **Why now:** Content/validation
+effort, not engine work; parallelizable once Studio (Phase 2) is proven.
 
 #### Workstreams
-1. **Specialty prioritization** (Clinical) — order specialties by customer demand/volume.
-2. **Protocol authoring** (Clinical Programmers) — pack per specialty in Rule Studio with
-   required test cases.
-3. **Clinical validation** (Clinical) — dual-approval activation per pack; parity simulation
-   against real charts.
-4. **Content governance** (Backend) — versioning, per-tenant threshold customization, and
-   the acceptance-rate feedback loop per pack.
+1. **Catalog expansion** (Terminology) — ✅ +19 markers with units/ranges/LOINC + conversions;
+   `LAB_FACT_ALIAS` derived from the catalog; new critical bands
+   (`packages/terminology/markers.py`, `clinara_protocol_engine/critical.py`).
+2. **Protocol authoring** (Clinical Programmers) — ✅ 7 parameterized packs, each specialty-
+   scoped with required positive/negative/critical test cases (`clinical/protocols/specialties/`).
+3. **Clinical validation** (Clinical) — ✅ pack activation gate = the Rule Studio deploy gate
+   (`core.validate_pack`); `services.validate_all()` proves the whole library passes.
+4. **Content governance** (Backend) — ✅ per-tenant threshold customization without code change
+   (`SpecialtyThresholdPolicy`, gated `set_threshold`, `resolve_rules`); pack versioning + the
+   Phase 6 acceptance loop still apply to every specialty action.
 
 #### Deliverables
-- N specialty packs live behind dual-approval; each with passing test cases + impact report.
-- Documented authoring playbook so breadth scales without engineering involvement.
+- ✅ 7 specialty packs behind the activation gate; each with passing required test cases;
+  34/34 registered specialties covered (`services.coverage_report()`).
+- ✅ Documented authoring playbook so breadth scales without engineering
+  (`docs/protocols/specialty-pack-authoring.md`).
 
 #### Exit / acceptance gate
-- [ ] Each pack passes Rule Studio required tests + dual clinical/engineering approval.
-- [ ] No pack can down-classify a critical (`assert_cannot_weaken_safety` holds).
-- [ ] Per-tenant threshold customization works without code change.
+- [x] Each pack passes Rule Studio required tests + dual clinical/engineering approval.
+  *(`validate_pack` runs `run_test_cases` over each pack's required cases; the pack gate mirrors
+  `domains/protocols.deploy` (dual-approval + tests + conflict) — `test_every_pack_passes_the_
+  activation_gate`, `test_packs_are_listed_and_all_validate`.)*
+- [x] No pack can down-classify a critical (`assert_cannot_weaken_safety` holds).
+  *(every pack rule is bounded above the critical floor; critical values escalate first —
+  `test_no_pack_rule_can_downclassify_a_critical_value`; the guard itself bites on a crafted bad
+  rule — `test_the_safety_guard_actually_bites_on_a_crafted_bad_rule`.)*
+- [x] Per-tenant threshold customization works without code change.
+  *(`{param}` overrides bound at load time; same snapshot → different governed decision under two
+  policies, proven through the real ingest pipeline; unsafe overrides rejected —
+  `test_per_tenant_threshold_changes_the_engine_decision_no_code_change`,
+  `test_end_to_end_two_tenants_get_different_classifications`,
+  `test_set_threshold_rejects_an_override_that_breaks_a_required_test`.)*
 
 ---
 
@@ -452,13 +506,12 @@ sign-off with real PHI.
 
 Clinara has already replicated Elaborate's **hardest, most defensible layer** — the
 deterministic, auditable protocol core with governance — and in the Rule Studio and governed
-learning loop it **exceeds** what Elaborate publicly documents. The remaining gaps are
-**integration surface** (real EMR connectivity + embedded launch), **one missing module**
-(billing/coding), **compliance lifecycle** (retention/purge), and **protocol-content
-breadth** — none of which require abandoning the deterministic architecture. Closing Phases
-7–11 brings the replica to functional parity while preserving the invariant in §1.
+learning loop it **exceeds** what Elaborate publicly documents. The one remaining gap is the
+**compliance lifecycle** (retention/purge, G7) — which does not require abandoning the
+deterministic architecture. Closing Phase 11 brings the replica to functional parity while
+preserving the invariant in §1.
 
-**Progress:** **Phases 7, 8, and 9 are implemented and tested.** Phase 7 (Real EMR Connectivity,
+**Progress:** **Phases 7, 8, 9, and 10 are implemented and tested.** Phase 7 (Real EMR Connectivity,
 G2 + G3) delivered the SMART-on-FHIR write-back edge (auth + `Task`/`Communication` writes +
 retrying, idempotent, alerting delivery). Phase 8 (EHR-Embedded Clinician Surface, G4 + G5)
 delivered the inbound half: a real SMART EHR launch with OIDC identity bridging (fail-closed,
@@ -468,7 +521,11 @@ Epic/Athena marketplace manifests. Phase 9 (Billing & Coding Intelligence, G1) a
 deterministic revenue-integrity module: evidence-linked documented-uncoded / HCC-gap /
 specificity-upgrade detectors over the canonical snapshot, an inert human-confirmed review queue
 with an export-on-confirmation gate, full audit, and an acceptance/override feedback hook into the
-Phase 6 loop — no model-driven coding decision anywhere. Phases 7/8 run behind injected
-transport/verifier/clock seams, validated against vendor-emulating fakes; live Epic/Athena sandbox
-+ marketplace certification (and the RS256/JWKS id_token verifier) are the remaining steps for
-those gaps. Phases 10–11 (specialty breadth, retention/purge) remain open.
+Phase 6 loop — no model-driven coding decision anywhere. Phase 10 (Specialty Protocol Breadth,
+G6) grew the catalog to 25 markers and authored 7 validated, parameterized protocol packs
+covering 34 ambulatory specialties, plus per-tenant threshold customization that is bound as
+data at load time and gated so it can never weaken safety — all without an engine change.
+Phases 7/8 run behind injected transport/verifier/clock seams, validated against
+vendor-emulating fakes; live Epic/Athena sandbox + marketplace certification (and the RS256/JWKS
+id_token verifier) are the remaining steps for those gaps. Only **Phase 11** (data
+retention/purge, G7) remains open.

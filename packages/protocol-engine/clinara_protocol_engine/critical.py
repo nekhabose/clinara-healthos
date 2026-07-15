@@ -24,9 +24,17 @@ class CriticalRange:
 
 # Canonical-unit critical limits. low = panic-low, high = panic-high.
 CRITICAL_THRESHOLDS: dict[CanonicalMarker, CriticalRange] = {
+    # --- Phase 1 core ---
     CanonicalMarker.POTASSIUM: CriticalRange(low=2.5, high=6.0),      # mmol/L
     CanonicalMarker.GLUCOSE: CriticalRange(low=50.0, high=500.0),     # mg/dL
     CanonicalMarker.EGFR: CriticalRange(low=15.0, high=None),         # mL/min/1.73m2 (renal failure)
+    # --- Phase 10 breadth: conventional adult panic limits ---
+    CanonicalMarker.SODIUM: CriticalRange(low=120.0, high=160.0),     # mmol/L
+    CanonicalMarker.CALCIUM: CriticalRange(low=6.0, high=13.0),       # mg/dL
+    CanonicalMarker.HEMOGLOBIN: CriticalRange(low=6.0, high=None),    # g/dL
+    CanonicalMarker.PLATELETS: CriticalRange(low=20.0, high=1000.0),  # 10^9/L
+    CanonicalMarker.WBC: CriticalRange(low=1.0, high=50.0),           # 10^9/L
+    CanonicalMarker.INR: CriticalRange(low=None, high=5.0),           # ratio (bleeding risk)
 }
 
 

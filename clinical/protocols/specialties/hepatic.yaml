@@ -1,0 +1,90 @@
+# Hepatic panel pack (Phase 10 — closes gaps.md G6).
+# ALT / AST / bilirubin monitoring for hepatology, GI, and the specialties that monitor
+# hepatotoxic therapy (dermatology on isotretinoin, rheumatology on methotrexate, pain
+# management on chronic NSAID/acetaminophen). Thresholds are practice-customizable.
+specialty: hepatic
+display_name: Hepatic panel
+version: 1
+evidence:
+  - "ACG Clinical Guideline: Evaluation of Abnormal Liver Chemistries (2017)"
+parameters:
+  alt_upper: 40.0         # U/L — upper limit of normal
+  alt_marked: 200.0       # U/L — marked transaminitis (>5x ULN)
+  ast_upper: 40.0         # U/L
+  bili_upper: 1.2         # mg/dL — upper limit of normal total bilirubin
+_scope: &hep_scope
+  - hepatology
+  - gastroenterology
+  - primary_care
+  - family_medicine
+  - internal_medicine
+  - infectious_disease
+  - medical_oncology
+  - dermatology
+  - rheumatology
+  - pain_management
+rules:
+  - id: alt_mild_elevation
+    version: 1
+    marker: alt
+    scope: {specialties: *hep_scope}
+    when:
+      all:
+        - {fact: lab.alt, operator: greater_than, value: {param: alt_upper}}
+        - {fact: lab.alt, operator: less_than, value: {param: alt_marked}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 90
+      reason_codes: [ALT_MILD_ELEVATION]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: alt_marked_transaminitis
+    version: 1
+    marker: alt
+    scope: {specialties: *hep_scope}
+    when:
+      all:
+        - {fact: lab.alt, operator: greater_than_or_equal, value: {param: alt_marked}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [ALT_MARKED_TRANSAMINITIS]
+    safety: {requires_manual_review: true, excluded_when: []}
+  - id: ast_elevation
+    version: 1
+    marker: ast
+    scope: {specialties: *hep_scope}
+    when:
+      all:
+        - {fact: lab.ast, operator: greater_than, value: {param: ast_upper}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 90
+      reason_codes: [AST_ELEVATION]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: hyperbilirubinemia
+    version: 1
+    marker: total_bilirubin
+    scope: {specialties: *hep_scope}
+    when:
+      all:
+        - {fact: lab.total_bilirubin, operator: greater_than, value: {param: bili_upper}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [HYPERBILIRUBINEMIA]
+    safety: {requires_manual_review: false, excluded_when: [patient.gilbert_syndrome]}
+test_cases:
+  - {name: alt_mild_flags, marker: alt, specialty: hepatology,
+     facts: {lab.alt: 85.0}, expected: routine_follow_up}
+  - {name: alt_marked_flags, marker: alt, specialty: hepatology,
+     facts: {lab.alt: 260.0}, expected: clinician_review_required}
+  - {name: alt_normal_silent, marker: alt, specialty: hepatology,
+     facts: {lab.alt: 25.0}, expected: normal}
+  - {name: ast_elevation_flags, marker: ast, specialty: gastroenterology,
+     facts: {lab.ast: 70.0}, expected: routine_follow_up}
+  - {name: bilirubin_high_flags, marker: total_bilirubin, specialty: hepatology,
+     facts: {lab.total_bilirubin: 2.4}, expected: clinician_review_required}
+  - {name: bilirubin_gilbert_excluded, marker: total_bilirubin, specialty: hepatology,
+     facts: {lab.total_bilirubin: 1.6, patient.gilbert_syndrome: true}, expected: normal}
