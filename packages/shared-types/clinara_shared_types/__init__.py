@@ -6,6 +6,7 @@ from .enums import (
     MessageUrgency,
     Priority,
     RecommendedAction,
+    RefillOutcome,
     ResultClassification,
     Role,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "MessageUrgency",
     "Priority",
     "RecommendedAction",
+    "RefillOutcome",
     "ResultClassification",
     "Role",
 ]

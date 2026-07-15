@@ -59,6 +59,27 @@ class MessageUrgency(str, Enum):
     INFORMATIONAL = "informational"
 
 
+class RefillOutcome(str, Enum):
+    """Prescription-refill outcomes (spec §6.3.3). Ordered least → most escalated.
+
+    ``auto_approve`` is reserved for an explicitly approved low-risk allowlist with all
+    deterministic safety preconditions clean; everything else routes to a human. Controlled
+    substances always take the ``escalate_controlled_substance`` path (spec §6.3.5).
+    """
+
+    AUTO_APPROVE = "auto_approve"
+    ONE_CLICK_PREPARED = "one_click_prepared"
+    ROUTE_TO_NURSE = "route_to_nurse"
+    ROUTE_TO_PRESCRIBER = "route_to_prescriber"
+    REQUEST_LABS = "request_labs"
+    REQUEST_APPOINTMENT = "request_appointment"
+    REJECT_TOO_EARLY = "reject_too_early"
+    REJECT_DISCONTINUED = "reject_discontinued"
+    ESCALATE_CONTRAINDICATION = "escalate_contraindication"
+    ESCALATE_MISSING_DATA = "escalate_missing_data"
+    ESCALATE_CONTROLLED_SUBSTANCE = "escalate_controlled_substance"
+
+
 class Priority(str, Enum):
     """Result priority band (spec §6.1.5 ``priority``). Drives queue placement."""
 

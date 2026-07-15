@@ -139,7 +139,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 1** | **Results Intelligence MVP** — the full governed pipeline end-to-end for lab results, human-approval-required. | ✅ **Implemented** |
 | **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ✅ **Implemented** |
 | **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ✅ **Implemented** |
-| **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ⬜ Planned |
+| **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ✅ **Implemented** |
 | **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ⬜ Planned |
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ⬜ Planned |
 | **GA** | Compliance attestation (HIPAA / SOC 2 Type II), DR drills, scale & performance SLOs. | ⬜ Planned |
@@ -225,10 +225,33 @@ implemented deterministically so it is exhaustively testable.
 | Durable human-in-loop orchestration — pause/resume/timer/compensation (spec §7.6) | `domains/workflows/durable.py` |
 | Gateway/monitoring/delivery + SMART-launch API | `apps/api/clinara/api_v1_integrations.py` |
 
-Run the tests: `cd apps/api && pytest` (workflow + Rule Studio + gateway + delivery + API +
-app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit
-tests/clinical-regression` (the deterministic clinical core + Studio core + HL7/durable core
-+ golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
+### Current status — Phase 4 (Prescription & Refill Intelligence)
+
+The **second governed clinical workflow**, on the same rails as Results Intelligence. A
+refill decision is produced by a **pure deterministic engine — never an LLM**
+(`domains/refills/core.evaluate_refill`): an ordered cascade that evaluates safety
+exclusions *first* — missing medication identity, allergy, contraindication, drug
+interaction, discontinuation, dose mismatch, controlled-substance status — and convenience
+*last*. Every decision records the exact `clinical_factors_used`, so it is fully traceable
+(spec §6.3.5). RxNorm identity is resolved deterministically; **missing identity blocks
+automation**, **controlled substances always take a non-overridable human path**, and
+**auto-approve is opt-in** to an explicitly client-approved low-risk allowlist — everything
+else routes to a nurse/prescriber. The LLM only ever drafts response wording; it can never
+choose an outcome or change a medication.
+
+| Phase 4 deliverable | Where |
+|---|---|
+| RxNorm medication catalog + controlled-substance schedule (spec §6.3.5) | `packages/terminology/medications.py` |
+| Deterministic refill engine — full factor set, ordered safety cascade (spec §6.3.2–6.3.4) | `domains/refills/core.py` |
+| Refill decision traceable to exact data used (spec §6.3.5) | `RefillDecision.clinical_factors_used` → `RefillEvaluationRecord` |
+| Medication/allergy/monitoring data + reviewable workflow | `domains/refills/models.py` |
+| Ingest → decide → persist → audit → events; human review actions (spec §6.3.6) | `domains/refills/services.py` |
+| Refill inbox + review API (`/api/v1/refills…`) | `apps/api/clinara/api_v1_refills.py` |
+
+Run the tests: `cd apps/api && pytest` (results + Rule Studio + gateway + delivery + refills +
+API + app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit
+tests/clinical-regression` (the deterministic clinical core + Studio core + HL7/durable/refill
+core + golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
 
 ---
 

@@ -350,7 +350,7 @@ EHR-simulator tests, contract tests per interface, chaos tests (interface flap, 
 
 # Phase 4 — Prescription & Refill Intelligence
 
-**Status:** ⬜ Planned.
+**Status:** ✅ **Implemented.** The second governed clinical workflow runs on the same rails as Results Intelligence. A refill decision is produced by a **pure deterministic engine — never an LLM** (`domains/refills/core.evaluate_refill`): an ordered cascade that puts safety exclusions first (missing identity, allergy, contraindication, interaction, discontinuation, dose mismatch, controlled substances) and convenience last, recording the exact `clinical_factors_used`. RxNorm identity is resolved deterministically and missing identity blocks automation; controlled substances always take a non-overridable human path; auto-approve is opt-in to an explicitly client-approved low-risk allowlist. The engine + medication catalog are exhaustively unit-tested; the Django layer (`domains/refills`) adds persistence, the review API, audit, and events. See the README "Current status — Phase 4" table.
 
 **Objective:** Deliver the second clinical workflow — refill evaluation — on the proven rails, reducing chart-review effort while enforcing deterministic medication safety.
 
@@ -386,10 +386,11 @@ Contraindication/interaction determinism, monitoring-lab-overdue logic, dose-mis
 
 ### Exit / acceptance gate
 
-- [ ] Approved medication classes supported.
-- [ ] All refill decisions traceable to exact data used.
-- [ ] Safety exclusions enforced (identity, dose, controlled substances, contraindications).
-- [ ] No medication change ever produced by an LLM.
+- [x] Approved medication classes supported. *(`clinara_terminology.medications` RxNorm catalog; `LOW_RISK_REFILL_CLASSES` allowlist)*
+- [x] All refill decisions traceable to exact data used. *(`RefillDecision.clinical_factors_used` persisted on every `RefillEvaluationRecord`; `test_refill_decision_persists_exact_factors`)*
+- [x] Safety exclusions enforced (identity, dose, controlled substances, contraindications). *(ordered cascade in `evaluate_refill`; `test_refill_engine`, `test_controlled_substance_always_escalates`)*
+- [x] No medication change ever produced by an LLM. *(the decision is pure deterministic Python; the LLM is never invoked in the refill path)*
+- [x] Auto-approve is opt-in low-risk only; everything else routes to a human. *(`client_auto_approve_classes`; `test_low_risk_without_policy_is_one_click_not_auto`)*
 
 ### Risks & mitigations
 

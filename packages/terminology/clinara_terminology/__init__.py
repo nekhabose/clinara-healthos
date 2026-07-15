@@ -17,6 +17,15 @@ from .markers import (
     CanonicalMarker,
     MarkerSpec,
 )
+from .medications import (
+    LOW_RISK_REFILL_CLASSES,
+    MEDICATION_SPECS,
+    ControlledSchedule,
+    MedicationClass,
+    MedicationSpec,
+    UnknownMedicationError,
+    map_medication,
+)
 from .units import to_canonical_unit
 
 __all__ = [
@@ -30,4 +39,12 @@ __all__ = [
     "map_code",
     "normalize_result",
     "to_canonical_unit",
+    # Phase 4 — medications
+    "MedicationClass",
+    "ControlledSchedule",
+    "MedicationSpec",
+    "MEDICATION_SPECS",
+    "UnknownMedicationError",
+    "map_medication",
+    "LOW_RISK_REFILL_CLASSES",
 ]

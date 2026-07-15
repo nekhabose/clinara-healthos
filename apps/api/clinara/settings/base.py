@@ -53,7 +53,9 @@ DOMAIN_APPS = [
     "domains.protocols",
     # Phase 3 — Production EHR Integration:
     "domains.delivery",
-    # Phase 4+ (declared here as the code lands):
+    # Phase 4 — Prescription & Refill Intelligence:
+    "domains.refills",
+    # Phase 5+ (declared here as the code lands):
     # "domains.feedback",
     # "domains.analytics",
 ]

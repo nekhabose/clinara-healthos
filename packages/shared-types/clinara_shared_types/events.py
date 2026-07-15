@@ -22,6 +22,9 @@ class EventType(str, Enum):
     DIAGNOSTIC_REPORT_RECEIVED = "DiagnosticReportReceived"
     PATIENT_MESSAGE_RECEIVED = "PatientMessageReceived"
     REFILL_REQUEST_RECEIVED = "RefillRequestReceived"
+    # Phase 4 — Prescription & Refill Intelligence:
+    REFILL_EVALUATED = "RefillEvaluated"
+    REFILL_DECIDED = "RefillDecided"
     CONTEXT_BUILT = "ContextBuilt"
     PROTOCOL_EVALUATED = "ProtocolEvaluated"
     DECISION_CREATED = "DecisionCreated"
