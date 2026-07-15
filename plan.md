@@ -290,7 +290,7 @@ Simulation fidelity (simulated vs actual evaluation parity), impact-analysis acc
 
 # Phase 3 — Production EHR Integration
 
-**Status:** ⬜ Planned.
+**Status:** ✅ **Implemented.** The sandbox pipeline is now fronted by a hardened gateway that survives real message chaos: an HL7 v2 adapter and FHIR connection lower vendor formats to the canonical model, malformed payloads are dead-lettered (never dropped) and replayed idempotently, duplicate deliveries never double-process, abusive sources are rate-limited, tenant-specific mappings resolve end-to-end, and silent-gap detection raises critical alerts when an interface goes quiet. EHR write-back / patient-portal messaging is idempotent and delivery-confirmed. Durable, human-in-the-loop orchestration (pause/resume, scheduled follow-up, compensation) is implemented as a pure, replayable saga runner (the Temporal role). Pure adapters/engines are in `packages/integration-sdk` + `domains/workflows/durable.py`; the Django layer (`domains/integrations`, `domains/delivery`) adds persistence, monitoring, and the ops API. See the README "Current status — Phase 3" table.
 
 **Objective:** Turn the sandbox pipeline into a production-grade, always-on integration surface with real HL7/FHIR ingestion, write-back, patient-portal messaging, and zero silent failures.
 
@@ -334,11 +334,12 @@ EHR-simulator tests, contract tests per interface, chaos tests (interface flap, 
 
 ### Exit / acceptance gate
 
-- [ ] Production-grade interface monitoring live with critical alerts.
-- [ ] **Zero silent failures** demonstrated under chaos testing.
-- [ ] Reprocessing/replay tested and idempotent.
-- [ ] Tenant-specific mappings supported.
-- [ ] Duplicate events never produce duplicate communication or tasks.
+- [x] Production-grade interface monitoring live with critical alerts. *(`monitoring.integration_health`/`dashboard`/`scan_silent_gaps`; `test_silent_gap_raises_critical_alert`)*
+- [x] **Zero silent failures** demonstrated under chaos testing. *(malformed → `DeadLetterEvent`; `test_malformed_hl7_is_dead_lettered_not_dropped`)*
+- [x] Reprocessing/replay tested and idempotent. *(`gateway.replay_dead_letter`; `test_dead_letter_replay_is_idempotent`)*
+- [x] Tenant-specific mappings supported. *(`IntegrationMapping` → `resolved_marker`; `test_tenant_specific_mapping_resolves_unknown_code`)*
+- [x] Duplicate events never produce duplicate communication or tasks. *(ingestion + delivery idempotency; `test_duplicate_hl7_never_double_processes`, `test_write_back_is_idempotent_per_workflow_channel`)*
+- [x] HL7 v2 adapter + durable human-in-loop orchestration. *(`clinara_integration_sdk.parse`; `domains/workflows/durable.py`; `test_hl7v2`, `test_durable`)*
 
 ### Risks & mitigations
 

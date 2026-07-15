@@ -16,7 +16,26 @@ from clinara.middleware.phi_safe_logging import correlation_id as _correlation_i
 from clinara.middleware.tenant import current_tenant_id, set_db_tenant
 from core.outbox import publish_event
 
-from .models import InboundMessage, InboundStatus
+from .models import InboundMessage, InboundStatus, Integration
+
+
+def register_integration(
+    *, tenant_id: str, name: str, kind: str, source_system: str = "",
+    expected_interval_seconds: int = 0, rate_capacity: int = 100,
+    rate_refill_per_second: float = 50.0,
+) -> Integration:
+    """Register a production interface (spec §6.7). Idempotent per (tenant, name)."""
+    current_tenant_id.set(str(tenant_id))
+    set_db_tenant(str(tenant_id))
+    integration, _ = Integration.objects.get_or_create(
+        tenant_id=tenant_id, name=name,
+        defaults={
+            "kind": kind, "source_system": source_system,
+            "expected_interval_seconds": expected_interval_seconds,
+            "rate_capacity": rate_capacity, "rate_refill_per_second": rate_refill_per_second,
+        },
+    )
+    return integration
 
 
 def derive_idempotency_key(tenant_id: str, payload: dict[str, Any]) -> str:
@@ -36,7 +55,8 @@ def derive_idempotency_key(tenant_id: str, payload: dict[str, Any]) -> str:
 
 
 def ingest_result(
-    *, tenant_id: str, payload: dict[str, Any], source: str = "fhir-sandbox"
+    *, tenant_id: str, payload: dict[str, Any], source: str = "fhir-sandbox",
+    integration_id: str | None = None,
 ) -> tuple[InboundMessage, bool]:
     """Persist the raw result idempotently. Returns (message, created)."""
     current_tenant_id.set(str(tenant_id))
@@ -47,7 +67,7 @@ def ingest_result(
         message, created = InboundMessage.objects.get_or_create(
             idempotency_key=key,
             defaults={
-                "tenant_id": tenant_id, "source": source,
+                "tenant_id": tenant_id, "source": source, "integration_id": integration_id,
                 "message_type": payload.get("resource_type", "Observation"),
                 "raw_payload": payload, "status": InboundStatus.RECEIVED,
             },
@@ -61,15 +81,20 @@ def ingest_result(
     return message, created
 
 
-def ingest_and_process(*, tenant_id: str, payload: dict[str, Any], source: str = "fhir-sandbox"):
+def ingest_and_process(*, tenant_id: str, payload: dict[str, Any], source: str = "fhir-sandbox",
+                       integration_id: str | None = None):
     """Ingest then process. Returns (message, workflow_or_None, created)."""
     from domains.workflows import services as workflows
 
-    message, created = ingest_result(tenant_id=tenant_id, payload=payload, source=source)
+    message, created = ingest_result(
+        tenant_id=tenant_id, payload=payload, source=source, integration_id=integration_id
+    )
     if not created and message.status == InboundStatus.PROCESSED:
         return message, None, False  # duplicate; already handled — never reprocess
     workflow = workflows.process_inbound(message)
     return message, workflow, created
 
 
-__all__ = ["ingest_result", "ingest_and_process", "derive_idempotency_key"]
+__all__ = [
+    "ingest_result", "ingest_and_process", "derive_idempotency_key", "register_integration",
+]

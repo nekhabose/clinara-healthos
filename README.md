@@ -138,7 +138,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 0** | **Foundation** — tenant isolation (RLS), identity & RBAC, hash-chained audit, transactional outbox, canonical contracts, PHI-safe observability. | ✅ **Implemented** |
 | **Phase 1** | **Results Intelligence MVP** — the full governed pipeline end-to-end for lab results, human-approval-required. | ✅ **Implemented** |
 | **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ✅ **Implemented** |
-| **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ⬜ Planned |
+| **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ✅ **Implemented** |
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ⬜ Planned |
 | **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ⬜ Planned |
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ⬜ Planned |
@@ -200,10 +200,35 @@ are exhaustively unit-tested; the Django layer is a thin persistence/API shell o
 | Self-describing config-release bundle | `services.build_release_bundle` |
 | Studio API (`/api/v1/protocols…`, `/protocol-versions/…`, `/deployments/…`) | `apps/api/clinara/api_v1_protocols.py` |
 
-Run the tests: `cd apps/api && pytest` (workflow + API + Rule Studio + app-layer isolation
-on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the
-deterministic clinical core + Studio core + golden dataset). PostgreSQL RLS is verified by
-the `rls` CI job.
+### Current status — Phase 3 (Production EHR Integration)
+
+The pipeline now survives real-world message chaos. A **hardened gateway** fronts ingestion:
+it rate-limits abusive sources, guards malformed payloads, dedupes duplicates, normalizes
+timestamps, and publishes canonical events — with **zero silent loss**. An **HL7 v2 adapter**
+and the FHIR connection lower vendor formats to the *same* canonical payload the engine
+already consumes (adapter-per-source, canonical-in-the-middle). Anything unprocessable is
+**dead-lettered** (visible, replayable); replay is idempotent. **Silent-gap detection**
+catches an interface that has gone quiet — a failure mode error counts never see — and
+raises a critical alert. EHR **write-back / patient-portal messaging** is idempotent and
+delivery-confirmed. Long-running, human-in-the-loop flows run on a **pure durable saga
+runner** (pause/resume, scheduled follow-up, reverse-order compensation) — the Temporal role,
+implemented deterministically so it is exhaustively testable.
+
+| Phase 3 deliverable | Where |
+|---|---|
+| HL7 v2 adapter (ADT/ORU/ORM/MDM → canonical) + token bucket + gap detector (pure) | `packages/integration-sdk/` |
+| Hardened gateway — malformed→dead-letter, dedup, rate-limit, timestamps (spec §6.7.4) | `domains/integrations/gateway.py` |
+| Dead-letter queue + idempotent replay | `gateway.replay_dead_letter`, `DeadLetterEvent` |
+| Interface health + silent-gap alerts (spec §6.7.5, §12.3) | `domains/integrations/monitoring.py` |
+| Tenant-specific mappings resolved end-to-end (spec §6.7) | `terminology.IntegrationMapping` → `canonicalize(resolved_marker=…)` |
+| Idempotent, confirmed EHR write-back / patient messaging (workstream 4) | `domains/delivery/` |
+| Durable human-in-loop orchestration — pause/resume/timer/compensation (spec §7.6) | `domains/workflows/durable.py` |
+| Gateway/monitoring/delivery + SMART-launch API | `apps/api/clinara/api_v1_integrations.py` |
+
+Run the tests: `cd apps/api && pytest` (workflow + Rule Studio + gateway + delivery + API +
+app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit
+tests/clinical-regression` (the deterministic clinical core + Studio core + HL7/durable core
++ golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
 
 ---
 

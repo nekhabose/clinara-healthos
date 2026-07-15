@@ -53,11 +53,13 @@ def run_result_pipeline(
     specialty: str | None = None,
     source_record_ids: list[str] | None = None,
     conflicting_facts: list[str] | None = None,
+    resolved_marker=None,
     llm: LLMClient | None = None,
 ) -> PipelineResult:
     """Run one lab result end to end and return every intermediate artifact."""
     observation = canonicalize(
-        system=system, code=code, value=value, unit=unit, observed_at=observed_at
+        system=system, code=code, value=value, unit=unit, observed_at=observed_at,
+        resolved_marker=resolved_marker,
     )
 
     # Unknown code: never dropped — park it on the unmapped-code queue (spec §6.1.6).

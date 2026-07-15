@@ -12,4 +12,5 @@ urlpatterns = [
     path("healthz", healthz, name="healthz"),
     path("api/v1/", include("clinara.api_v1")),  # Phase 1 — Results Intelligence
     path("api/v1/", include("clinara.api_v1_protocols")),  # Phase 2 — Clinical Rule Studio
+    path("api/v1/", include("clinara.api_v1_integrations")),  # Phase 3 — EHR Integration
 ]

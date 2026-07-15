@@ -118,6 +118,7 @@ def process_inbound(message) -> WorkflowInstance | None:
             patient_facts=patient_facts, prior_value=prior,
             ref_low=ref.get("low"), ref_high=ref.get("high"),
             specialty=specialty, source_record_ids=[message.idempotency_key],
+            resolved_marker=marker,
         )
         decision = result.evaluation.decision
 

@@ -23,6 +23,7 @@ jobs:
           pip install -e ../../packages/clinical-models
           pip install -e ../../packages/terminology
           pip install -e ../../packages/protocol-engine
+          pip install -e ../../packages/integration-sdk
           pip install -e ".[dev]"
       - name: Lint (ruff)
         run: ruff check .
@@ -32,7 +33,7 @@ jobs:
         run: pytest
       - name: Clinical core tests (engine, terminology, generation, golden dataset)
         working-directory: .
-        run: PYTHONPATH=apps/api pytest packages/terminology/tests packages/protocol-engine/tests tests/unit tests/clinical-regression --import-mode=importlib
+        run: PYTHONPATH=apps/api pytest packages/terminology/tests packages/protocol-engine/tests packages/integration-sdk/tests tests/unit tests/clinical-regression --import-mode=importlib
 
   # Tenant-isolation gate (plan §2): verify PostgreSQL Row-Level Security actually blocks
   # cross-tenant access, connected as the NON-superuser app role (superusers bypass RLS).
@@ -63,6 +64,7 @@ jobs:
           pip install -e ../../packages/clinical-models
           pip install -e ../../packages/terminology
           pip install -e ../../packages/protocol-engine
+          pip install -e ../../packages/integration-sdk
           pip install -e ".[dev]" "psycopg[binary]>=3.1"
       - name: Provision the non-superuser app role (RLS is enforced against it)
         env:

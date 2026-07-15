@@ -19,6 +19,7 @@ dependencies = [
   "clinara-clinical-models",
   "clinara-terminology",
   "clinara-protocol-engine",
+  "clinara-integration-sdk",
 ]
 
 [project.optional-dependencies]

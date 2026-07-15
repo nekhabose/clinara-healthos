@@ -51,8 +51,9 @@ DOMAIN_APPS = [
     "domains.safety",
     # Phase 2 — Clinical Rule Studio:
     "domains.protocols",
-    # Phase 3+ (declared here as the code lands):
-    # "domains.delivery",
+    # Phase 3 — Production EHR Integration:
+    "domains.delivery",
+    # Phase 4+ (declared here as the code lands):
     # "domains.feedback",
     # "domains.analytics",
 ]
