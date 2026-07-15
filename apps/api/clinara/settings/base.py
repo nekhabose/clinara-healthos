@@ -49,8 +49,9 @@ DOMAIN_APPS = [
     "domains.workflows",
     "domains.generation",
     "domains.safety",
-    # Phase 2+ (declared here as the code lands):
-    # "domains.protocols",
+    # Phase 2 — Clinical Rule Studio:
+    "domains.protocols",
+    # Phase 3+ (declared here as the code lands):
     # "domains.delivery",
     # "domains.feedback",
     # "domains.analytics",

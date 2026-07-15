@@ -137,7 +137,7 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 |---|---|---|
 | **Phase 0** | **Foundation** — tenant isolation (RLS), identity & RBAC, hash-chained audit, transactional outbox, canonical contracts, PHI-safe observability. | ✅ **Implemented** |
 | **Phase 1** | **Results Intelligence MVP** — the full governed pipeline end-to-end for lab results, human-approval-required. | ✅ **Implemented** |
-| **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ⬜ Planned |
+| **Phase 2** | **Clinical Rule Studio** — author/simulate/deploy/roll-back clinical logic with no code change. | ✅ **Implemented** |
 | **Phase 3** | **Production EHR Integration** — hardened HL7/FHIR ingestion, write-back, zero silent failures. | ⬜ Planned |
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ⬜ Planned |
 | **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ⬜ Planned |
@@ -174,9 +174,36 @@ is exhaustively unit-tested; the Django layer is a thin persistence/API shell ov
 outbox, canonical contracts, PHI-safe observability) underpins all of the above — see
 `apps/api/core/`, `apps/api/domains/{tenants,identity,audit}/`, and `packages/shared-types/`.
 
-Run the tests: `cd apps/api && pytest` (workflow + API + app-layer isolation on SQLite);
-`PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the deterministic
-clinical core + golden dataset). PostgreSQL RLS is verified by the `rls` CI job.
+### Current status — Phase 2 (Clinical Rule Studio)
+
+Clinical experts own the logic. A clinical programmer authors a **versioned declarative
+rule** (the same `Rule` shape the production engine evaluates), simulates it against
+scenarios with guaranteed engine parity, reviews an **impact report** (automation /
+escalation / high-risk-cohort deltas, classification changes, precedence conflicts),
+routes it for **dual clinical + engineering approval**, deploys it **shadow → progressive
+→ full**, and **rolls it back** — with **no application code change**. Clinical config
+ships as a self-describing release bundle through a pipeline distinct from application CI/CD
+(spec §14.3).
+
+The **governed authoring mechanics are pure Python** (`domains/protocols/core.py`) so they
+are exhaustively unit-tested; the Django layer is a thin persistence/API shell over them.
+
+| Phase 2 deliverable | Where |
+|---|---|
+| Rule lifecycle state machine — draft → review → approved → active → rolled-back (spec §6.5.4) | `domains/protocols/core.py` (`RuleState`, `assert_transition`) |
+| Simulation with engine-parity — current vs proposed over scenarios (spec §6.5.6) | `core.simulate` / `services.simulate` |
+| Impact analysis before activation (spec §6.5.7) | `core.impact_report` / `services.analyze_impact` |
+| Conflict detection → automation suppression, never silent resolution (spec §6.4.3) | `core.detect_conflicts` |
+| Activation gate — dual approval + regression tests must pass | `services.deploy` (`_run_test_gate`, `ActivationBlocked`) |
+| Un-weakenable safety floor — a rule cannot down-classify a critical | `core.assert_cannot_weaken_safety` (`SafetyViolation`) |
+| Shadow / progressive / full deploy + manual & automatic rollback (spec §6.5.8) | `services.deploy` / `services.rollback`, `Deployment`/`Rollback` models |
+| Self-describing config-release bundle | `services.build_release_bundle` |
+| Studio API (`/api/v1/protocols…`, `/protocol-versions/…`, `/deployments/…`) | `apps/api/clinara/api_v1_protocols.py` |
+
+Run the tests: `cd apps/api && pytest` (workflow + API + Rule Studio + app-layer isolation
+on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the
+deterministic clinical core + Studio core + golden dataset). PostgreSQL RLS is verified by
+the `rls` CI job.
 
 ---
 

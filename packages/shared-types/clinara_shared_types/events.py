@@ -34,7 +34,11 @@ class EventType(str, Enum):
     CLINICIAN_EDITED = "ClinicianEdited"
     CLINICIAN_OVERRODE = "ClinicianOverrode"
     PATIENT_RESPONDED = "PatientResponded"
+    # Phase 2 — Clinical Rule Studio lifecycle (spec §6.5.4/§6.5.8):
+    PROTOCOL_SIMULATED = "ProtocolSimulated"
+    PROTOCOL_APPROVED = "ProtocolApproved"
     PROTOCOL_DEPLOYED = "ProtocolDeployed"
+    PROTOCOL_ROLLED_BACK = "ProtocolRolledBack"
     MAPPING_CHANGED = "MappingChanged"
 
 

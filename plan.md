@@ -232,7 +232,7 @@ Clinical rule tests (positive/negative/boundary/missing/conflicting/high-risk co
 
 # Phase 2 — Clinical Rule Studio
 
-**Status:** ⬜ Planned.
+**Status:** ✅ **Implemented.** A clinical programmer can author a versioned rule, simulate it against scenarios with engine-parity, run an impact report, route for dual (clinical + engineering) approval, deploy it shadow → progressive → full, and roll it back — all with **no application code change**. The governed authoring mechanics (lifecycle state machine, simulation, impact, conflict detection, safety guard) are pure Python and exhaustively unit-tested; a thin Django layer (`domains/protocols/`) adds persistence, the Studio API, audit, and outbox events. The activation gate enforces dual-approval + regression tests; precedence conflicts suppress automation; a rule that would weaken a critical is refused. See the README "Current status — Phase 2" table for the code map.
 
 **Objective:** Let clinical experts author, simulate, test, approve, deploy, and roll back clinical logic **without any application code change**.
 
@@ -274,11 +274,12 @@ Simulation fidelity (simulated vs actual evaluation parity), impact-analysis acc
 
 ### Exit / acceptance gate
 
-- [ ] A clinical programmer creates and deploys an approved rule with **no code change**.
-- [ ] Impact analysis available and accurate before activation.
-- [ ] Regression testing enforced as an activation gate.
-- [ ] Shadow mode, progressive rollout, and rollback all demonstrated.
-- [ ] Configuration conflicts detected and shown to suppress automation.
+- [x] A clinical programmer creates and deploys an approved rule with **no code change**. *(`domains/protocols/services`, `api_v1_protocols`; `test_api_protocols.test_full_studio_flow_over_http`)*
+- [x] Impact analysis available and accurate before activation. *(`core.impact_report`; `analyze_impact` persists to the version)*
+- [x] Regression testing enforced as an activation gate. *(`deploy` runs `_run_test_gate`; `test_deploy_blocked_when_test_case_fails`)*
+- [x] Shadow mode, progressive rollout, and rollback all demonstrated. *(`DeploymentMode`; `test_shadow_mode_does_not_activate`, `test_rollback_restores_prior_version`)*
+- [x] Configuration conflicts detected and shown to suppress automation. *(`core.detect_conflicts`; `test_conflict_suppresses_automation_on_deploy`)*
+- [x] Dual approval + un-weakenable safety floor enforced. *(`approve` role gate; `assert_cannot_weaken_safety`; `test_rule_weakening_a_critical_is_refused_at_deploy`)*
 
 ### Risks & mitigations
 
