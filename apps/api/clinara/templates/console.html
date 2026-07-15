@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clinara HealthOS — Console</title>
+  <style>
+    :root {
+      --bg:#0b1220; --panel:#121a2b; --panel2:#0f1626; --line:#22304d; --text:#e6edf7;
+      --muted:#93a4c2; --accent:#4f8cff; --ok:#2fbf71; --warn:#f5a524; --crit:#f2545b;
+      --urgent:#ff8a5b; --chip:#1c2740;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    header { display:flex; align-items:center; gap:16px; padding:14px 22px;
+      border-bottom:1px solid var(--line); background:var(--panel2); position:sticky; top:0; z-index:5; }
+    header h1 { font-size:16px; margin:0; letter-spacing:.3px; }
+    header .tag { color:var(--muted); font-size:12px; }
+    header .spacer { flex:1; }
+    .who { font-size:12px; color:var(--muted); }
+    .who b { color:var(--text); }
+    nav { display:flex; gap:6px; padding:10px 18px; border-bottom:1px solid var(--line);
+      background:var(--panel2); flex-wrap:wrap; position:sticky; top:53px; z-index:4; }
+    nav button { background:transparent; color:var(--muted); border:1px solid transparent;
+      padding:7px 13px; border-radius:8px; cursor:pointer; font-size:13px; }
+    nav button.active { background:var(--chip); color:var(--text); border-color:var(--line); }
+    main { padding:22px; max-width:1180px; margin:0 auto; }
+    .row { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+    .col { flex:1; min-width:320px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+      padding:16px; margin-bottom:16px; }
+    .card h2 { font-size:14px; margin:0 0 12px; }
+    .list-item { padding:11px 12px; border:1px solid var(--line); border-radius:10px;
+      margin-bottom:8px; cursor:pointer; background:var(--panel2); }
+    .list-item:hover { border-color:var(--accent); }
+    .list-item .top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .muted { color:var(--muted); }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+    .chip { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px;
+      font-weight:600; background:var(--chip); color:var(--muted); border:1px solid var(--line); }
+    .chip.ok{ color:#7ef0ad; border-color:#1c4a33;} .chip.warn{ color:#ffd27a; border-color:#5a4415;}
+    .chip.crit{ color:#ff9aa0; border-color:#5a1f24; background:#26141a;}
+    .chip.urgent{ color:#ffbfa3; border-color:#5a3320;}
+    .chip.info{ color:#9cc2ff; border-color:#1e365f;}
+    button.act { background:var(--accent); color:white; border:none; padding:7px 12px;
+      border-radius:8px; cursor:pointer; font-size:13px; margin:4px 6px 0 0; }
+    button.act.sec { background:var(--chip); color:var(--text); border:1px solid var(--line); }
+    button.act.danger { background:#3a1b21; color:#ff9aa0; border:1px solid #5a1f24; }
+    input, select, textarea { background:var(--panel2); color:var(--text); border:1px solid var(--line);
+      border-radius:8px; padding:8px 10px; font-size:13px; width:100%; }
+    label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; }
+    .kv div:nth-child(odd){ color:var(--muted); }
+    pre { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:12px;
+      overflow:auto; font-size:12px; }
+    .stat { display:inline-block; min-width:120px; margin:0 18px 12px 0; }
+    .stat .n { font-size:26px; font-weight:700; } .stat .l { font-size:12px; color:var(--muted); }
+    .login { max-width:420px; margin:8vh auto; text-align:center; }
+    .login .card { padding:26px; }
+    .empty { color:var(--muted); padding:16px; text-align:center; }
+    .banner { font-size:12px; color:var(--muted); margin-bottom:10px; }
+    a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <form id="csrfform" style="display:none">{% csrf_token %}</form>
+
+  {% if not user.is_authenticated %}
+  <div class="login">
+    <div class="card">
+      <h1>Clinara HealthOS</h1>
+      <p class="muted">Governed clinical-workflow console. Choose a demo role to sign in.</p>
+      <form method="post" action="/console/login">
+        <input type="hidden" name="csrfmiddlewaretoken"
+               value="{{ csrf_token }}" />
+        <label>Role</label>
+        <select name="username">
+          <option value="clinician">Clinician (results & messages inbox)</option>
+          <option value="programmer">Clinical programmer (rule studio)</option>
+          <option value="nurse">Nurse (refills)</option>
+          <option value="analyst">Operations analyst (analytics & integrations)</option>
+        </select>
+        <div style="margin-top:14px"><button class="act" type="submit">Sign in</button></div>
+      </form>
+      <p class="muted" style="margin-top:16px; font-size:12px">
+        If sign-in fails, run <span class="mono">manage.py seed_demo</span> first.
+      </p>
+    </div>
+  </div>
+  {% else %}
+
+  <header>
+    <h1>Clinara HealthOS</h1>
+    <span class="tag">Governed clinical-workflow console</span>
+    <div class="spacer"></div>
+    <span class="who">Signed in as <b id="who-name">…</b> · <span id="who-role" class="muted"></span></span>
+    <form method="post" action="/console/logout" style="display:inline; margin-left:6px">
+      <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
+      <button class="act sec" type="submit">Sign out</button>
+    </form>
+  </header>
+
+  <nav id="tabs"></nav>
+  <main id="view"><div class="empty">Loading…</div></main>
+
+  {% verbatim %}
+  <script>
+    const CSRF = document.querySelector('#csrfform input').value;
+    const api = async (path, opts={}) => {
+      const res = await fetch(path, {
+        credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+        ...opts,
+      });
+      const text = await res.text();
+      let data; try { data = text ? JSON.parse(text) : {}; } catch(e){ data = {raw:text}; }
+      if(!res.ok) throw Object.assign(new Error(data.detail||res.statusText), {status:res.status,data});
+      return data;
+    };
+    const el = (html) => { const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; };
+    const view = document.getElementById('view');
+    const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    const urgencyChip = (u) => {
+      const m={emergency:'crit',immediate_clinician_review:'crit',same_day_review:'urgent',
+        within_24_hours:'warn',routine_clinical:'info',administrative:'info',informational:'info'};
+      return `<span class="chip ${m[u]||''}">${esc(u)}</span>`;
+    };
+    const classChip = (c) => {
+      const m={critical_escalation:'crit',high_priority_review:'urgent',clinician_review_required:'warn',
+        routine_follow_up:'info',conflicting_data:'warn',unsupported:'crit',insufficient_data:'warn',normal:'ok'};
+      return `<span class="chip ${m[c]||''}">${esc(c)}</span>`;
+    };
+    const outcomeChip = (o) => {
+      const crit=['escalate_controlled_substance','escalate_contraindication','escalate_missing_data'];
+      const warn=['route_to_prescriber','route_to_nurse','reject_too_early','reject_discontinued','request_labs','request_appointment'];
+      const cls = crit.includes(o)?'crit':(o==='auto_approve'?'ok':(warn.includes(o)?'warn':'info'));
+      return `<span class="chip ${cls}">${esc(o)}</span>`;
+    };
+
+    // ---------- Tabs ----------
+    const TABS = [
+      ['results','Results Inbox', renderResults],
+      ['refills','Refills', renderRefills],
+      ['messages','Messages', renderMessages],
+      ['studio','Rule Studio', renderStudio],
+      ['analytics','Analytics', renderAnalytics],
+      ['integrations','Integrations', renderIntegrations],
+    ];
+    let active = 'results';
+    function drawTabs(){
+      const nav = document.getElementById('tabs'); nav.innerHTML='';
+      TABS.forEach(([id,label]) => {
+        const b = el(`<button class="${id===active?'active':''}">${label}</button>`);
+        b.onclick = () => { active=id; drawTabs(); route(); };
+        nav.appendChild(b);
+      });
+    }
+    async function route(){
+      view.innerHTML = '<div class="empty">Loading…</div>';
+      const tab = TABS.find(t=>t[0]===active);
+      try { await tab[2](); } catch(e){ view.innerHTML = `<div class="card"><b>Error:</b> ${esc(e.message)}</div>`; }
+    }
+
+    // ---------- Results ----------
+    async function renderResults(){
+      const {results} = await api('/api/v1/workflows');
+      const list = results.map(w => `
+        <div class="list-item" data-id="${w.id}">
+          <div class="top">
+            <div><b>${esc(w.marker)}</b> · <span class="mono muted">${esc(w.patient_external_id)}</span></div>
+            ${classChip(w.classification)}
+          </div>
+          <div class="muted" style="margin-top:4px">priority ${esc(w.priority)} · ${esc(w.status)}</div>
+        </div>`).join('') || '<div class="empty">No results in queue.</div>';
+      view.innerHTML = `
+        <div class="banner">Deterministic decision → validated draft → human review. Every action audited.</div>
+        <div class="row">
+          <div class="col"><div class="card"><h2>Clinician inbox (${results.length})</h2>${list}
+            <div style="margin-top:12px"><button class="act sec" id="new-result">+ Ingest sample result</button></div></div></div>
+          <div class="col"><div class="card" id="detail"><div class="empty">Select a result to review.</div></div></div>
+        </div>`;
+      view.querySelectorAll('.list-item').forEach(n => n.onclick = () => resultDetail(n.dataset.id));
+      view.querySelector('#new-result').onclick = ingestSample;
+    }
+    async function resultDetail(id){
+      const w = await api('/api/v1/workflows/'+id);
+      const c = w.communication||{};
+      const d = document.getElementById('detail');
+      d.innerHTML = `
+        <h2>${esc(w.marker)} — ${esc(w.patient_external_id)}</h2>
+        <div style="margin-bottom:10px">${classChip(w.classification)} <span class="chip">${esc(w.priority)}</span>
+          <span class="chip">${esc(w.automation_status)}</span></div>
+        <div class="kv">
+          <div>Recommended</div><div>${esc(w.recommended_action||'—')}</div>
+          <div>Reason codes</div><div class="mono">${esc((w.reason_codes||[]).join(', ')||'—')}</div>
+          <div>Facts used</div><div class="mono">${esc((w.clinical_facts_used||[]).join(', ')||'—')}</div>
+          <div>Matched rule</div><div class="mono">${w.matched_rule?esc(w.matched_rule.id||'—')+' v'+esc(w.matched_rule.version||''):'—'}</div>
+        </div>
+        <label>Patient message preview ${c.used_fallback?'<span class="chip warn">fallback</span>':''}
+          ${c.validation_passed?'<span class="chip ok">validated</span>':''}</label>
+        <pre>${esc(c.patient_message_preview||'(clinician-only — no patient message)')}</pre>
+        <div>
+          <button class="act" data-a="approve">Approve</button>
+          <button class="act sec" data-a="escalate">Escalate</button>
+          <button class="act danger" data-a="reject">Reject</button>
+          <button class="act sec" data-a="replay">Replay</button>
+        </div>
+        <div id="res-out" class="muted" style="margin-top:8px"></div>`;
+      d.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+        const a=b.dataset.a; const out=d.querySelector('#res-out');
+        try {
+          const r = await api(`/api/v1/workflows/${id}/${a}`, {method:'POST', body:'{}'});
+          out.innerHTML = a==='replay'
+            ? `Replay determinism: <b>${r.matches?'reproduced ✓':'MISMATCH'}</b>`
+            : `Action <b>${a}</b> → status <b>${esc(r.status)}</b> (audited).`;
+          if(a!=='replay') renderResults();
+        } catch(e){ out.textContent = 'Error: '+e.message; }
+      });
+    }
+    async function ingestSample(){
+      const vals=[7.9,8.6,6.4,9.1]; const v=vals[Math.floor(Math.random()*vals.length)];
+      await api('/api/v1/results/ingest',{method:'POST',body:JSON.stringify({
+        patient_external_id:'P-'+(1100+Math.floor(Math.random()*90)), code_system:'LOINC',
+        code:'4548-4', value:v, unit:'%', observed_at:'2026-07-15T09:00:00+00:00',
+        patient_facts:{'patient.has_diabetes':true}, specialty:'primary_care'})});
+      renderResults();
+    }
+
+    // ---------- Refills ----------
+    async function renderRefills(){
+      const {results} = await api('/api/v1/refills');
+      const list = results.map(w => `
+        <div class="list-item" data-id="${w.id}">
+          <div class="top"><div><b>${esc(w.medication_name||w.rxnorm)}</b>
+            <span class="mono muted">${esc(w.patient_external_id)}</span></div>${outcomeChip(w.outcome)}</div>
+          <div class="muted" style="margin-top:4px">${w.controlled_substance?'<span class="chip crit">controlled</span> ':''}
+            status ${esc(w.status)}${w.automation_allowed?' · <span class="chip ok">auto-approve eligible</span>':''}</div>
+        </div>`).join('') || '<div class="empty">No refill requests.</div>';
+      view.innerHTML = `
+        <div class="banner">Refill decisions are deterministic — never an LLM. Controlled substances always route to a human.</div>
+        <div class="row"><div class="col"><div class="card"><h2>Refill queue (${results.length})</h2>${list}</div></div>
+        <div class="col"><div class="card" id="rdetail"><div class="empty">Select a refill.</div></div></div></div>`;
+      view.querySelectorAll('.list-item').forEach(n=>n.onclick=()=>refillDetail(n.dataset.id));
+    }
+    async function refillDetail(id){
+      const w = await api('/api/v1/refills/'+id); const d=document.getElementById('rdetail');
+      d.innerHTML = `
+        <h2>${esc(w.medication_name||w.rxnorm)}</h2>
+        <div style="margin-bottom:8px">${outcomeChip(w.outcome)} <span class="chip">${esc(w.status)}</span></div>
+        <div class="kv">
+          <div>Reason codes</div><div class="mono">${esc((w.reason_codes||[]).join(', '))}</div>
+          <div>Required actions</div><div class="mono">${esc((w.required_actions||[]).join(', '))}</div>
+          <div>Data used</div><div class="mono">${esc((w.clinical_factors_used||[]).join(', '))}</div>
+        </div>
+        <div style="margin-top:10px">
+          <button class="act" data-a="approve">Approve</button>
+          <button class="act sec" data-a="route">Route</button>
+          <button class="act sec" data-a="escalate">Escalate</button>
+          <button class="act danger" data-a="reject">Reject</button>
+        </div><div id="rf-out" class="muted" style="margin-top:8px"></div>`;
+      d.querySelectorAll('button[data-a]').forEach(b=>b.onclick=async()=>{
+        try{ const r=await api(`/api/v1/refills/${id}/${b.dataset.a}`,{method:'POST',body:'{}'});
+          d.querySelector('#rf-out').innerHTML=`→ status <b>${esc(r.status)}</b> (audited)`; renderRefills();
+        }catch(e){ d.querySelector('#rf-out').textContent='Error: '+e.message; }
+      });
+    }
+
+    // ---------- Messages ----------
+    async function renderMessages(){
+      const {results} = await api('/api/v1/messages');
+      const list = results.map(m => `
+        <div class="list-item" data-id="${m.id}">
+          <div class="top"><div><span class="mono muted">${esc(m.patient_external_id)}</span>
+            · ${esc(m.category||'—')}</div>${urgencyChip(m.urgency)}</div>
+          <div class="muted" style="margin-top:4px">${(m.red_flags||[]).length?'<span class="chip crit">RED FLAG</span> ':''}
+            → ${esc(m.destination)} · ${esc(m.status)}</div>
+        </div>`).join('') || '<div class="empty">No messages.</div>';
+      view.innerHTML = `
+        <div class="banner">A deterministic red-flag detector is the safety floor — the model can only raise urgency, never lower it.</div>
+        <div class="row"><div class="col"><div class="card"><h2>Message triage (${results.length})</h2>${list}
+          <div style="margin-top:12px"><button class="act sec" id="new-msg">+ Simulate emergency message</button></div></div></div>
+        <div class="col"><div class="card" id="mdetail"><div class="empty">Select a message.</div></div></div></div>`;
+      view.querySelectorAll('.list-item').forEach(n=>n.onclick=()=>msgDetail(n.dataset.id));
+      view.querySelector('#new-msg').onclick=async()=>{
+        await api('/api/v1/messages/ingest',{method:'POST',body:JSON.stringify({
+          patient_external_id:'P-'+(1200+Math.floor(Math.random()*80)),
+          text:'I have severe chest pain and trouble breathing'})}); renderMessages();
+      };
+    }
+    async function msgDetail(id){
+      const m = await api('/api/v1/messages/'+id); const d=document.getElementById('mdetail');
+      d.innerHTML = `
+        <h2>${esc(m.category||'message')} ${urgencyChip(m.urgency)}</h2>
+        <div style="margin-bottom:8px">${(m.red_flags||[]).map(f=>`<span class="chip crit">${esc(f)}</span>`).join(' ')}</div>
+        <label>Original message (verbatim)</label><pre>${esc(m.original_text||'')}</pre>
+        <div class="kv"><div>Reason codes</div><div class="mono">${esc((m.reason_codes||[]).join(', '))}</div>
+          <div>Destination</div><div>${esc(m.destination)}</div>
+          <div>Auto-resolvable</div><div>${m.auto_resolvable?'yes (non-clinical)':'no — human required'}</div></div>
+        ${m.draft_response?`<label>Approved draft response</label><pre>${esc(m.draft_response)}</pre>`:''}
+        <div style="margin-top:8px"><button class="act" data-a="resolve">Resolve</button>
+          <button class="act sec" data-a="escalate">Escalate</button></div>
+        <div id="m-out" class="muted" style="margin-top:8px"></div>`;
+      d.querySelectorAll('button[data-a]').forEach(b=>b.onclick=async()=>{
+        try{ const r=await api(`/api/v1/messages/${id}/${b.dataset.a}`,{method:'POST',body:'{}'});
+          d.querySelector('#m-out').innerHTML=`→ status <b>${esc(r.status)}</b> (audited)`; renderMessages();
+        }catch(e){ d.querySelector('#m-out').textContent='Error: '+e.message; }
+      });
+    }
+
+    // ---------- Rule Studio ----------
+    async function renderStudio(){
+      const {results} = await api('/api/v1/protocols');
+      const rows = results.map(p=>`<div class="list-item"><div class="top">
+        <div><b>${esc(p.title||p.key)}</b> <span class="mono muted">${esc(p.key)}</span></div>
+        <span class="chip info">${esc(p.marker)}</span></div></div>`).join('')
+        || '<div class="empty">No protocols authored yet.</div>';
+      view.innerHTML = `
+        <div class="banner">Clinical experts author, simulate, dual-approve, deploy (shadow→progressive→full) and roll back — with no code change.</div>
+        <div class="card"><h2>Protocols (${results.length})</h2>${rows}</div>
+        <div class="card"><h2>How it works</h2>
+          <p class="muted">Rules are versioned declarative artifacts evaluated by the same engine that runs in
+          production, so a simulation is a faithful preview. The activation gate enforces dual (clinical +
+          engineering) approval and passing regression tests; precedence conflicts suppress automation; and a
+          rule that would down-classify a critical value is refused before it can be stored.</p>
+          <p class="muted">The seeded <span class="mono">a1c-mgmt</span> protocol was authored, simulated,
+          impact-analyzed, dual-approved and shadow-deployed by the seed step — see the audit trail.</p>
+        </div>`;
+    }
+
+    // ---------- Analytics ----------
+    async function renderAnalytics(){
+      const board = await api('/api/v1/analytics/dashboards');
+      const {results:recs} = await api('/api/v1/analytics/recommendations');
+      const ov = board.clinical.overall;
+      const stat=(n,l)=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`;
+      const recRows = recs.map(r=>`<div class="list-item"><div class="top">
+        <div><b>${esc(r.kind)}</b> → <span class="mono">${esc(r.target)}</span></div>
+        <span class="chip ${r.status==='approved'?'ok':(r.status==='pending'?'warn':'')}">${esc(r.status)}</span></div>
+        <div class="muted mono" style="margin-top:4px">${esc(JSON.stringify(r.proposal))}</div>
+        ${r.status==='pending'?`<div style="margin-top:8px"><button class="act" data-app="${r.id}">Approve</button></div>`:''}
+        </div>`).join('') || '<div class="empty">No recommendations. Derive one below.</div>';
+      view.innerHTML = `
+        <div class="banner">Personalization is a recommendation engine, not an actuator — nothing takes effect without human approval, and preferences can never weaken safety.</div>
+        <div class="card"><h2>Clinical dashboard</h2>
+          ${stat((ov.agreement_rate*100).toFixed(0)+'%','Agreement')}
+          ${stat((ov.edit_rate*100).toFixed(0)+'%','Edit rate')}
+          ${stat((ov.override_rate*100).toFixed(0)+'%','Override rate')}
+          ${stat((board.operations.escalation_rate*100).toFixed(0)+'%','Escalation')}
+          ${stat(ov.total,'Decisions')}</div>
+        <div class="card"><h2>Governed recommendations</h2>${recRows}
+          <div style="margin-top:12px"><button class="act sec" id="derive">Derive preference for “clinician”</button>
+            <span id="an-out" class="muted"></span></div></div>`;
+      view.querySelectorAll('button[data-app]').forEach(b=>b.onclick=async()=>{
+        await api(`/api/v1/analytics/recommendations/${b.dataset.app}/approve`,{method:'POST',body:'{}'}); renderAnalytics();
+      });
+      view.querySelector('#derive').onclick=async()=>{
+        try{ const r=await api('/api/v1/analytics/preferences/derive',{method:'POST',
+          body:JSON.stringify({practitioner:'clinician'})});
+          view.querySelector('#an-out').textContent = r.status==='insufficient_signal'
+            ? ' — insufficient signal yet' : ' — created pending recommendation'; renderAnalytics();
+        }catch(e){ view.querySelector('#an-out').textContent=' — '+e.message; }
+      };
+    }
+
+    // ---------- Integrations ----------
+    async function renderIntegrations(){
+      let board; try { board = await api('/api/v1/integrations/dashboard'); }
+      catch(e){ board = {interfaces:[],open_alerts:0,dead_letter_open:0}; }
+      const rows = board.interfaces.map(i=>`<div class="list-item"><div class="top">
+        <div><b>${esc(i.name)}</b> <span class="chip info">${esc(i.kind)}</span></div>
+        <span class="chip ${i.status==='connected'?'ok':(i.status==='disconnected'?'crit':'warn')}">${esc(i.status)}</span></div>
+        <div class="muted" style="margin-top:4px">throughput ${i.throughput} · processed ${i.processed}
+          · malformed ${i.malformed} · dead-letter ${i.dead_letter_open}</div></div>`).join('')
+        || '<div class="empty">No interfaces registered.</div>';
+      view.innerHTML = `
+        <div class="banner">Hardened gateway: malformed → dead-letter (never dropped), duplicates suppressed, silent-gap alerts.</div>
+        <div class="card"><h2>Interface health</h2>
+          <div>${stat2(board.interfaces.length,'Interfaces')} ${stat2(board.open_alerts,'Open alerts')}
+            ${stat2(board.dead_letter_open,'Dead letters')}</div>${rows}
+          <div style="margin-top:12px">
+            <button class="act sec" id="reg">Register HL7 interface</button>
+            <button class="act sec" id="send">Send sample HL7 (ORU)</button>
+            <button class="act danger" id="bad">Send malformed → dead-letter</button>
+            <span id="ig-out" class="muted"></span></div></div>`;
+      const out = view.querySelector('#ig-out');
+      const ensure = async () => {
+        const {results} = await api('/api/v1/integrations');
+        if(results.length) return results[0].id;
+        const r = await api('/api/v1/integrations',{method:'POST',
+          body:JSON.stringify({name:'lab-hl7',kind:'hl7v2',expected_interval_seconds:0})});
+        return r.id;
+      };
+      view.querySelector('#reg').onclick=async()=>{ await ensure(); out.textContent=' — registered'; renderIntegrations(); };
+      const ORU='MSH|^~\\&|LIS|GENERAL|CLINARA|CLINARA|20260715090000||ORU^R01|'+Date.now()+
+        '|P|2.5\rPID|1||P-'+(1300+Math.floor(Math.random()*80))+'^^^HOSP^MR||DOE^JANE\r'+
+        'OBX|1|NM|4548-4^Hemoglobin A1c^LN||8.2|%|||||F|||20260715091500\r';
+      view.querySelector('#send').onclick=async()=>{ const id=await ensure();
+        const r=await api(`/api/v1/integrations/${id}/receive`,{method:'POST',body:JSON.stringify({hl7:ORU})});
+        out.textContent=' — '+r.status; renderIntegrations(); };
+      view.querySelector('#bad').onclick=async()=>{ const id=await ensure();
+        const r=await api(`/api/v1/integrations/${id}/receive`,{method:'POST',body:JSON.stringify({hl7:'garbage'})});
+        out.textContent=' — '+r.status+' (visible below, replayable)'; renderIntegrations(); };
+    }
+    function stat2(n,l){ return `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`; }
+
+    // ---------- Boot ----------
+    (async () => {
+      try {
+        const me = await api('/console/whoami');
+        document.getElementById('who-name').textContent = me.username || '—';
+        document.getElementById('who-role').textContent = me.role || '';
+      } catch(e){}
+      drawTabs(); route();
+    })();
+  </script>
+  {% endverbatim %}
+  {% endif %}
+</body>
+</html>

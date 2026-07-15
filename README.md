@@ -142,7 +142,8 @@ prior safety guarantees. Full detail in [`plan.md`](./plan.md).
 | **Phase 4** | **Prescription & Refill Intelligence** — second workflow on proven rails. | ✅ **Implemented** |
 | **Phase 5** | **Patient Message Intelligence** — LLM classification under a deterministic red-flag floor. | ✅ **Implemented** |
 | **Phase 6** | **Analytics & Personalization** — governed, approval-gated learning loop. | ✅ **Implemented** |
-| **GA** | Compliance attestation (HIPAA / SOC 2 Type II), DR drills, scale & performance SLOs. | ⬜ Planned |
+| **GA** | **GA Hardening** — kill switches, break-glass, SLO evaluation, DR reconciliation, compliance attestation, §13.5 release gate. | ✅ **Implemented** |
+| **Phase 7** | **Real EMR Connectivity** — SMART-on-FHIR write-back (`Task`/`Communication`), retrying/idempotent direct-release, degraded-channel alert. Closes gaps G2 + G3 in [`gaps.md`](./gaps.md). | ✅ **Implemented** (fakes-validated; live sandbox pending) |
 
 ### Current status — Phase 1 (Results Intelligence MVP)
 
@@ -293,11 +294,85 @@ against a safety-protected field set, so it **provably cannot weaken a safety co
 | Cross-tenant de-identification + small-cell suppression (spec §12.5) | `core.deidentify` / `suppress_small_cells` |
 | Analytics + governance API (`/api/v1/feedback`, `/api/v1/analytics…`) | `apps/api/clinara/api_v1_analytics.py` |
 
-**All six delivery phases are implemented.** Run the tests: `cd apps/api && pytest` (results +
-Rule Studio + gateway + delivery + refills + messages + analytics + API + app-layer isolation
-on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit tests/clinical-regression` (the
-deterministic clinical core + Studio/HL7/durable/refill/triage/analytics core + golden
-dataset). PostgreSQL RLS is verified by the `rls` CI job.
+---
+
+### Current status — Phase 7 (Real EMR Connectivity)
+
+The write-back edge is now **real**, not a stub. An approved result is delivered at **direct
+release** the way Elaborate does it: a **patient-portal message** (FHIR `Communication`) plus a
+**care-team inbasket task** (FHIR `Task`), written to the EMR over an authenticated
+SMART-on-FHIR connection. This closes gaps **G2** (SMART Backend Services auth) and **G3**
+(Epic/Athena write-back adapters) from [`gaps.md`](./gaps.md).
+
+The design follows the same discipline as every phase: a **pure, dependency-injected** adapter
+core in `clinara_integration_sdk` (the HTTP transport, the JWT signer, and the clock are all
+injected), with the Django `domains/delivery` layer keeping every governance guarantee. Because
+the transport and signer are injected, the entire flow is **validated against a
+vendor-emulating token + FHIR server today** and points at a live Epic/Athena endpoint by
+configuration alone (`EHR_WRITE_BACK`) — no code change. Dev/test signs assertions with an
+`HmacSigner`; production injects an **RS384 signer** over a vault-held key (the flow is
+identical either way). *Validation is against conformance fakes; live-sandbox certification and
+the HL7 v2 MLLP listener are the remaining GA steps for this phase.*
+
+Safety and governance are preserved throughout:
+
+- **Confirmed delivery with bounded retry.** Transient failures (`429`/`5xx`/network) are
+  retried with backoff (injected sleeper → deterministic); a terminal `4xx` fails fast. Every
+  attempt is recorded and the terminal outcome emits `DeliverySucceeded`/`DeliveryFailed` —
+  **zero silent loss**.
+- **Idempotent direct release.** `release_result` produces **exactly one** portal message and
+  **one** EHR task per approved workflow; re-releasing is a no-op — duplicate patient
+  communication is a clinical-safety event and is structurally prevented.
+- **Degraded-channel operator alert.** A write-back failure spike raises a `WriteBackDegraded`
+  signal, surfaced via `delivery/health`.
+- **Canonical-in-the-middle.** The adapter speaks only FHIR; vendor quirks live in `EPIC` /
+  `ATHENA` profiles and never leak into protocol logic. Bearer tokens are fetched once and
+  reused until near expiry.
+
+| Phase 7 deliverable | Where |
+|---|---|
+| SMART Backend Services auth (client-assertion JWT, token cache/refresh, scopes) | `packages/integration-sdk/clinara_integration_sdk/smart.py` |
+| FHIR R4 write-back client (`Task` + `Communication`, id extraction, Epic/Athena profiles, retryable-vs-terminal) | `packages/integration-sdk/clinara_integration_sdk/fhir_writeback.py` |
+| Injectable HTTP transport (stdlib `UrllibTransport`) + pure retry policy | `…/transport.py`, `…/retry.py` |
+| `SmartEhrClient` bridging the delivery `EhrClient` seam to FHIR write-back | `apps/api/domains/delivery/adapters.py` |
+| Retrying/confirmed `deliver`, idempotent `release_result`, `write_back_health` + degraded alert | `apps/api/domains/delivery/services.py` |
+| Release + delivery-health API (`/api/v1/workflows/{id}/release`, `/api/v1/delivery/health`) | `apps/api/clinara/api_v1_integrations.py` |
+| Per-vendor endpoint config (env-backed, secrets stay in the vault) | `clinara/settings/base.py` + `production.py` (`EHR_WRITE_BACK`) |
+| Tests (SMART flow, FHIR write-back, retry, end-to-end delivery/release/alert/token reuse) | `packages/integration-sdk/tests/test_{smart,fhir_writeback,retry}.py`, `apps/api/tests/test_phase7_smart_delivery.py` |
+
+---
+
+### Current status — GA Hardening (compliance, resilience, scale, release gate)
+
+The five GA focus areas are delivered as governed platform mechanics with the same discipline
+as every phase: a pure, Django-free decision core (exhaustively unit-tested), a thin Django
+layer (persistence + audit + outbox), and — where operational — a runbook, Terraform, and
+blocking CI wiring. **Emergency controls, reliability, DR, and compliance are all-or-nothing
+and fail-closed:** a broader kill switch is never overridden by a narrower one; break-glass is
+time-boxed, reason-mandatory, and always audited; a missing SLO metric is a breach, not a pass;
+a DR drill fails loudly if RTO/RPO are missed or a workflow is stranded; attestation is refused
+on any completeness gap; and the release gate blocks unless all eight §13.5 conditions hold.
+The genuinely external, process-bound items (a third-party SOC 2 Type II audit, a live pen-test,
+a live cloud DR game-day, sustained production load) are delivered as the code, drills, gates,
+and runbooks that make them executable — never asserted as complete.
+
+| GA deliverable | Where |
+|---|---|
+| Kill switches across all 10 scopes (spec §11.4), broadest-wins, deny-on-ambiguity | `domains/killswitch/core.py` (`resolve`); `services.engage/release/check` |
+| LLM provider failover honoring the kill switch (spec §11.4) | `domains/reliability/core.py` (`select_provider`); `services.choose_provider` |
+| Break-glass emergency access — time-boxed, reason-mandatory, audited (spec §10.2) | `domains/identity/breakglass.py`; `identity.services.grant/revoke_break_glass` |
+| SLO evaluation over the full spec §12.4 set + breach ledger | `domains/reliability/core.py` (`evaluate_slos`); `services.evaluate_and_record` |
+| DR reconciliation — replay + stranded workflows + RTO/RPO check (spec §15) | `domains/continuity/core.py` (`reconcile`); `services.run_drill`; `docs/runbooks/disaster-recovery.md` |
+| Multi-AZ + PITR + versioned encrypted backups (spec §15) | `infrastructure/terraform/modules/database/main.tf` |
+| Compliance attestation — audit/access/decision-trace completeness (spec §10.1) | `domains/compliance/core.py` (`build_attestation`); `docs/compliance/` |
+| §13.5 release gate — fail-closed, all 8 conditions, wired into CI | `apps/api/core/release_gate.py`; `scripts/release_gate.py`; `release-gate` CI job |
+
+**All six delivery phases plus GA hardening are implemented.** Run the tests: `cd apps/api &&
+pytest` (results + Rule Studio + gateway + delivery + refills + messages + analytics + GA
+services + API + app-layer isolation on SQLite); `PYTHONPATH=apps/api pytest packages tests/unit
+tests/clinical-regression` (the deterministic clinical core + Studio/HL7/durable/refill/triage/
+analytics core + kill-switch/reliability/continuity/compliance/release-gate/break-glass cores +
+golden dataset). PostgreSQL RLS is verified by the `rls` CI job; the §13.5 gate by `release-gate`.
 
 ---
 

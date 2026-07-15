@@ -3,6 +3,7 @@
 from .enums import (
     AutomationMode,
     AutomationStatus,
+    KillSwitchScope,
     MessageUrgency,
     Priority,
     RecommendedAction,
@@ -17,6 +18,7 @@ __all__ = [
     "EventType",
     "AutomationMode",
     "AutomationStatus",
+    "KillSwitchScope",
     "MessageUrgency",
     "Priority",
     "RecommendedAction",

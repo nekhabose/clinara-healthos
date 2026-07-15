@@ -46,6 +46,11 @@ def test_app_layer_queries_are_tenant_scoped():
     a, b = str(uuid.uuid4()), str(uuid.uuid4())
     _make_patient(a, "PA")
     _make_patient(b, "PB")
+    # Operate within tenant a's context, exactly as a real request does (the DB session var is
+    # pinned per request). On Postgres this also satisfies RLS; on SQLite set_db_tenant is a
+    # no-op and the assertion tests app-layer filtering alone. Without this, the session would
+    # still be pinned to tenant b from the last _make_patient and RLS would (correctly) hide a.
+    set_db_tenant(a)
     assert PatientReference.objects.filter(tenant_id=a).count() == 1
     assert PatientReference.objects.filter(tenant_id=a, external_id="PB").count() == 0
 

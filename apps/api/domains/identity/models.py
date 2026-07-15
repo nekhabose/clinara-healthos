@@ -41,3 +41,27 @@ class PractitionerProfile(models.Model):
 
     def __str__(self) -> str:
         return self.display_name
+
+
+class BreakGlassGrantRecord(models.Model):
+    """Time-boxed emergency access grant (GA hardening — spec §10.2).
+
+    Break-glass is always audited (grant, use, revoke) and hard-expires. Validation lives in
+    the pure ``identity.breakglass`` core; this row is the persisted grant plus its lifecycle
+    timestamps. ``expires_at`` is stamped at grant time so an expiry check needs no arithmetic.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    responder = models.CharField(max_length=200, db_index=True)
+    reason = models.TextField()
+    granted_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    revoked = models.BooleanField(default=False, db_index=True)
+    revoked_by = models.CharField(max_length=200, blank=True, default="")
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-granted_at"]
+
+    def __str__(self) -> str:
+        return f"break-glass:{self.responder}"

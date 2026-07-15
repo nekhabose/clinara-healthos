@@ -40,6 +40,9 @@ class EventType(str, Enum):
     WORKFLOW_ESCALATED = "WorkflowEscalated"
     DELIVERY_SUCCEEDED = "DeliverySucceeded"
     DELIVERY_FAILED = "DeliveryFailed"
+    # Phase 7 — Real EMR Connectivity (write-back release + degraded-channel alert):
+    RESULT_RELEASED = "ResultReleased"
+    WRITE_BACK_DEGRADED = "WriteBackDegraded"
     CLINICIAN_APPROVED = "ClinicianApproved"
     CLINICIAN_EDITED = "ClinicianEdited"
     CLINICIAN_OVERRODE = "ClinicianOverrode"
@@ -50,6 +53,14 @@ class EventType(str, Enum):
     PROTOCOL_DEPLOYED = "ProtocolDeployed"
     PROTOCOL_ROLLED_BACK = "ProtocolRolledBack"
     MAPPING_CHANGED = "MappingChanged"
+    # GA hardening — emergency controls, reliability, DR, compliance (spec §11.4/§10.2/§15/§10.1):
+    KILL_SWITCH_ENGAGED = "KillSwitchEngaged"
+    KILL_SWITCH_RELEASED = "KillSwitchReleased"
+    BREAK_GLASS_GRANTED = "BreakGlassGranted"
+    BREAK_GLASS_REVOKED = "BreakGlassRevoked"
+    SLO_BREACHED = "SLOBreached"
+    DR_RECONCILED = "DisasterRecoveryReconciled"
+    ATTESTATION_GENERATED = "AttestationGenerated"
 
 
 class RetryPolicy(BaseModel):

@@ -18,6 +18,28 @@ class Role(str, Enum):
     CLINICIAN = "clinician"
     NURSE = "nurse"
     OPERATIONS_ANALYST = "operations_analyst"
+    # GA hardening (spec §10.2): emergency, time-boxed, fully-audited privileged access.
+    EMERGENCY_RESPONDER = "emergency_responder"
+
+
+class KillSwitchScope(str, Enum):
+    """Automation kill-switch scopes (spec §11.4), broadest → narrowest.
+
+    A switch at any scope suppresses automation for everything within it. Order matters:
+    ``resolve`` walks this precedence so a GLOBAL disable can never be overridden by a
+    narrower enable, and the broadest matching active switch is reported as the cause.
+    """
+
+    GLOBAL = "global"
+    TENANT = "tenant"
+    SITE = "site"
+    SPECIALTY = "specialty"
+    WORKFLOW = "workflow"
+    PROTOCOL = "protocol"
+    CLINICIAN = "clinician"
+    MODEL_PROVIDER = "model_provider"
+    INTEGRATION = "integration"
+    COMMUNICATION_CHANNEL = "communication_channel"
 
 
 class AutomationMode(str, Enum):

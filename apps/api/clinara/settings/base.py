@@ -60,6 +60,11 @@ DOMAIN_APPS = [
     # Phase 6 — Analytics & Personalization:
     "domains.feedback",
     "domains.analytics",
+    # GA hardening — emergency controls, reliability, DR, compliance:
+    "domains.killswitch",
+    "domains.reliability",
+    "domains.continuity",
+    "domains.compliance",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PLATFORM_APPS + DOMAIN_APPS
@@ -157,3 +162,12 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# ---- EHR write-back (plan Phase 7 — Real EMR Connectivity) ----
+# Per-vendor SMART Backend Services config for outbound Task/Communication write-back.
+# Empty by default so no environment writes to a live EHR unless explicitly configured;
+# production.py fills real endpoints from the environment. Each entry:
+#   {"base_url", "token_url", "client_id", "scopes": [...], "vendor": "epic"|"athena"}.
+# The JWT signer is injected at call time (production: RS384 over a vault-held key) and is
+# never stored here — this block holds endpoints and non-secret client identifiers only.
+EHR_WRITE_BACK: dict[str, dict] = {}

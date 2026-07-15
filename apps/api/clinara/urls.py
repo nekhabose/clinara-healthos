@@ -1,4 +1,5 @@
 """Root URL configuration."""
+from django.conf import settings
 from django.http import JsonResponse
 from django.urls import include, path
 
@@ -17,3 +18,7 @@ urlpatterns = [
     path("api/v1/", include("clinara.api_v1_messages")),  # Phase 5 — Message Intelligence
     path("api/v1/", include("clinara.api_v1_analytics")),  # Phase 6 — Analytics & Personalization
 ]
+
+# Demo console — dev/demo only (same-origin UI over the API). Never mounted in production.
+if settings.DEBUG:
+    urlpatterns += [path("console/", include("clinara.console"))]
