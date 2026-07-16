@@ -14,6 +14,8 @@ from django.shortcuts import redirect, render
 from django.urls import path
 from django.views.decorators.http import require_POST
 
+from clinara.rbac import capabilities_for
+
 
 def console(request):
     """Serve the single-page console (sign-in screen when unauthenticated)."""
@@ -50,11 +52,15 @@ def console_logout(request):
 
 def whoami(request):
     u = request.user
+    role = getattr(u, "role", None)
     return JsonResponse({
         "authenticated": u.is_authenticated,
         "username": getattr(u, "username", None),
-        "role": getattr(u, "role", None),
+        "role": role,
         "tenant": str(getattr(u, "organization_id", "") or ""),
+        # The console gates its navigation by these — the same policy the server enforces
+        # (clinara.rbac). The server remains the source of truth; this is UX only.
+        "capabilities": sorted(capabilities_for(role)) if u.is_authenticated else [],
     })
 
 

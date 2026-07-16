@@ -33,7 +33,8 @@ class Command(BaseCommand):
         set_db_tenant(DEMO_TENANT)
 
         for username, role in [("clinician", "clinician"), ("programmer", "clinical_programmer"),
-                               ("nurse", "nurse"), ("analyst", "operations_analyst")]:
+                               ("nurse", "nurse"), ("analyst", "operations_analyst"),
+                               ("admin", "tenant_administrator")]:
             user, created = User.objects.get_or_create(
                 username=username, defaults={"organization_id": DEMO_TENANT, "role": role}
             )

@@ -732,15 +732,21 @@
     }
 
     // ---------------------------------------------------------------- app state
+    // `caps`: the capabilities that grant a section (user needs ANY). Empty = always visible.
+    // Mirrors the server policy in clinara.rbac; the server (RbacMiddleware) is authoritative.
     const SECTIONS = [
-      { id: 'inbox', label: 'Inbox', icon: 'inbox' },
-      { id: 'results', label: 'Results', icon: 'results' },
-      { id: 'messages', label: 'Patient Messages', icon: 'message' },
-      { id: 'prescriptions', label: 'Prescriptions', icon: 'pill' },
-      { id: 'analytics', label: 'Analytics', icon: 'analytics' },
-      { id: 'protocols', label: 'Protocols', icon: 'protocols' },
-      { id: 'settings', label: 'Settings', icon: 'settings' },
+      { id: 'inbox', label: 'Inbox', icon: 'inbox', caps: ['results', 'messages', 'prescriptions'] },
+      { id: 'results', label: 'Results', icon: 'results', caps: ['results'] },
+      { id: 'messages', label: 'Patient Messages', icon: 'message', caps: ['messages'] },
+      { id: 'prescriptions', label: 'Prescriptions', icon: 'pill', caps: ['prescriptions'] },
+      { id: 'analytics', label: 'Analytics', icon: 'analytics', caps: ['analytics'] },
+      { id: 'protocols', label: 'Protocols', icon: 'protocols', caps: ['protocols'] },
+      { id: 'settings', label: 'Settings', icon: 'settings', caps: [] },
     ];
+    const myCaps = () => (state.me && state.me.capabilities) || [];
+    const sectionAllowed = (s) => !s.caps || s.caps.length === 0 || s.caps.some(c => myCaps().includes(c));
+    const allowedSections = () => SECTIONS.filter(sectionAllowed);
+    const firstAllowedSection = () => (allowedSections()[0] || { id: 'settings' }).id;
     const state = { section: store.get('section', 'inbox'), me: {}, counts: {}, searchIndex: [], focusIdx: -1 };
 
     // ---------------------------------------------------------------- sidebar
@@ -748,7 +754,7 @@
       const nav = $('#nav');
       nav.innerHTML = '';
       nav.appendChild(el(`<div class="nav-label">Workspace</div>`));
-      SECTIONS.forEach((s, i) => {
+      allowedSections().forEach((s, i) => {
         if (s.id === 'analytics') nav.appendChild(el(`<div class="nav-label">Insight</div>`));
         const c = state.counts[s.id];
         const alert = (s.id === 'inbox' || s.id === 'results' || s.id === 'messages') && state.counts._urgent > 0 && (s.id === 'inbox');
@@ -761,6 +767,8 @@
     }
 
     function go(section) {
+      const target = SECTIONS.find(x => x.id === section);
+      if (target && !sectionAllowed(target)) section = firstAllowedSection();
       state.section = section;
       store.set('section', section);
       state.focusIdx = -1;
@@ -1480,6 +1488,9 @@
         $('#u-role').textContent = titleize(me.role || '');
         $('#u-avatar').textContent = (me.username || '?').slice(0, 2).toUpperCase();
       } catch (e) {}
+      // Land on a section this role may see (the stored section may now be off-limits).
+      const cur = SECTIONS.find(s => s.id === state.section);
+      if (!cur || !sectionAllowed(cur)) state.section = firstAllowedSection();
       // warm counts for the sidebar, then render current section
       try { updateCounts(await loadAllItems()); } catch (e) { drawNav(); }
       render();

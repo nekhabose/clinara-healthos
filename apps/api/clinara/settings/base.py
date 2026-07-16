@@ -88,6 +88,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     # Clinara cross-cutting middleware:
     "clinara.middleware.tenant.TenantContextMiddleware",       # sets RLS session var per request
+    "clinara.middleware.rbac.RbacMiddleware",                  # role-gates /api/v1/* per spec §10.2
     "clinara.middleware.phi_safe_logging.CorrelationIdMiddleware",
 ]
 
