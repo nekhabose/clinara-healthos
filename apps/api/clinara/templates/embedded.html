@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clinara — In-EHR Review</title>
+  <style>
+    /* Clinara embedded surface — a calm, low-cognitive-load panel that renders inside the
+       EHR app frame. Deliberately compact: it rides beside the chart, not full-screen. */
+    :root {
+      --bg:#F4F1EA; --surface:#ffffff; --surface-2:#F8F6F0;
+      --text:#232821; --text-muted:#5C6157; --text-faint:#8A8F83;
+      --line:#E7E2D6; --line-strong:#D9D3C5;
+      --accent:#3F5346; --accent-soft:#E8EEE6; --accent-border:#D0DCCC; --accent-text:#3A4B3E;
+      --ok:#4B7355; --ok-soft:#EAF1EA; --ok-border:#D2E0D2;
+      --warn:#946A2C; --warn-soft:#F6EEDD; --warn-border:#E7D6B6;
+      --crit:#A6432F; --crit-soft:#F5E7E2; --crit-border:#E6CBC1;
+      --r:10px; --r-sm:8px; --r-pill:999px;
+      --font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text);
+           font-size:13px; line-height:1.5; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px;
+             padding:10px 16px; background:var(--surface); border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:8px; font-weight:600; }
+    .dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
+    .who { font-size:12px; color:var(--text-muted); }
+    .who b { color:var(--text); font-weight:600; }
+    .layout { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:14px 16px;
+              align-items:start; }
+    @media (max-width:720px){ .layout { grid-template-columns:1fr; } }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); }
+    .card h2 { margin:0; padding:11px 14px; font-size:12px; font-weight:600; letter-spacing:.02em;
+               text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--line); }
+    .queue { max-height:66vh; overflow:auto; }
+    .row { padding:10px 14px; border-bottom:1px solid var(--line); cursor:pointer;
+           display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .row:hover { background:var(--surface-2); }
+    .row.active { background:var(--accent-soft); }
+    .row .marker { font-weight:600; }
+    .row .sub { font-size:11px; color:var(--text-faint); }
+    .pill { display:inline-flex; align-items:center; padding:1px 9px; border-radius:var(--r-pill);
+            font-size:11px; font-weight:600; border:1px solid transparent; white-space:nowrap; }
+    .pill.significant { background:var(--warn-soft); color:var(--warn); border-color:var(--warn-border); }
+    .pill.critical { background:var(--crit-soft); color:var(--crit); border-color:var(--crit-border); }
+    .pill.insignificant { background:var(--ok-soft); color:var(--ok); border-color:var(--ok-border); }
+    .pill.neutral { background:var(--surface-2); color:var(--text-muted); border-color:var(--line-strong); }
+    .panel-body { padding:14px; }
+    .empty { padding:28px 16px; color:var(--text-faint); text-align:center; }
+    .lab { display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+           padding:8px 0; border-bottom:1px solid var(--line); }
+    .lab .val { font-family:var(--mono); font-weight:600; font-size:15px; }
+    .lab .range { font-size:11px; color:var(--text-faint); }
+    .status { font-size:11px; font-weight:600; }
+    .status.below_range,.status.above_range { color:var(--warn); }
+    .status.in_range { color:var(--ok); }
+    .status.unknown { color:var(--text-faint); }
+    .kv { display:flex; gap:8px; padding:3px 0; font-size:12px; }
+    .kv .k { color:var(--text-muted); min-width:120px; }
+    .kv .v { font-family:var(--mono); }
+    .prov { margin-top:12px; padding-top:10px; border-top:1px dashed var(--line-strong);
+            font-size:11px; color:var(--text-muted); }
+    .prov .tag { display:inline-block; margin:2px 4px 2px 0; padding:1px 7px; border-radius:var(--r-sm);
+                 background:var(--surface-2); border:1px solid var(--line); font-family:var(--mono); }
+    .fresh { color:var(--ok); }
+    .stale { color:var(--warn); }
+    .sec-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;
+                 color:var(--text-faint); margin:14px 0 4px; }
+    .notice { margin:14px 16px; padding:12px 14px; background:var(--warn-soft);
+              border:1px solid var(--warn-border); border-radius:var(--r); color:var(--warn); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span> Clinara HealthOS</div>
+    <div class="who" id="who">connecting to EHR session…</div>
+  </header>
+
+  <div id="notice"></div>
+
+  <div class="layout">
+    <section class="card">
+      <h2>Review queue</h2>
+      <div class="queue" id="queue"><div class="empty">Loading…</div></div>
+    </section>
+    <section class="card">
+      <h2>Chart context</h2>
+      <div class="panel-body" id="panel">
+        <div class="empty">Select an item to see the chart context the decision used.</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Same-origin fetch — rides the session cookie established by the SMART callback.
+    const api = (p) => fetch(p, { credentials: "same-origin", headers: { "Accept": "application/json" } });
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c =>
+      ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+    const classFor = (c) => ["critical","significant","insignificant"].includes(c) ? c : "neutral";
+
+    let activeId = null;
+
+    async function boot() {
+      const r = await api("/api/v1/embedded/session");
+      const who = document.getElementById("who");
+      if (r.status === 200) {
+        const s = await r.json();
+        who.innerHTML = `<b>${esc(s.username)}</b> · ${esc(s.role || "clinician")}` +
+          (s.launch && s.launch.patient ? ` · patient ${esc(s.launch.patient)}` : "");
+        loadQueue();
+      } else {
+        who.textContent = "not signed in";
+        document.getElementById("notice").innerHTML =
+          '<div class="notice">Open Clinara from within your EHR to start a session — ' +
+          'there is no separate login.</div>';
+        document.getElementById("queue").innerHTML = '<div class="empty">No session.</div>';
+      }
+    }
+
+    async function loadQueue() {
+      const r = await api("/api/v1/workflows");
+      const q = document.getElementById("queue");
+      if (r.status !== 200) { q.innerHTML = '<div class="empty">Unable to load queue.</div>'; return; }
+      const items = (await r.json()).results || [];
+      if (!items.length) { q.innerHTML = '<div class="empty">Queue is clear.</div>'; return; }
+      q.innerHTML = items.map(w => `
+        <div class="row" data-id="${esc(w.id)}" onclick="select('${esc(w.id)}')">
+          <div>
+            <div class="marker">${esc(w.marker || w.workflow_type)}</div>
+            <div class="sub">${esc(w.patient_external_id || "")} · ${esc(w.status)}</div>
+          </div>
+          <span class="pill ${classFor(w.classification)}">${esc(w.classification || w.priority || "—")}</span>
+        </div>`).join("");
+    }
+
+    async function select(id) {
+      activeId = id;
+      document.querySelectorAll(".row").forEach(el =>
+        el.classList.toggle("active", el.dataset.id === id));
+      const panel = document.getElementById("panel");
+      panel.innerHTML = '<div class="empty">Loading chart context…</div>';
+      const r = await api(`/api/v1/embedded/context/${id}`);
+      if (r.status !== 200) {
+        panel.innerHTML = '<div class="empty">No chart context snapshot for this item.</div>';
+        return;
+      }
+      panel.innerHTML = renderPanel(await r.json());
+    }
+
+    function renderPanel(p) {
+      let html = "";
+      if (p.labs && p.labs.length) {
+        html += '<div class="sec-title">Labs</div>';
+        html += p.labs.map(l => {
+          const lo = l.reference_range && l.reference_range.low, hi = l.reference_range && l.reference_range.high;
+          const range = (lo != null || hi != null) ? `ref ${lo != null ? lo : "–"}–${hi != null ? hi : "–"}` : "";
+          const trend = l.trend ? ` · ${esc(l.trend)}` : "";
+          return `<div class="lab">
+            <div><div>${esc(l.marker)}</div><div class="range">${esc(range)}${trend}</div></div>
+            <div style="text-align:right">
+              <div class="val">${esc(l.value)} ${esc(l.unit || "")}</div>
+              <div class="status ${esc(l.status)}">${esc((l.status || "").replace("_"," "))}</div>
+            </div></div>`;
+        }).join("");
+      }
+      const pc = p.patient_context || {};
+      const keys = Object.keys(pc);
+      if (keys.length) {
+        html += '<div class="sec-title">Patient context</div>';
+        html += keys.map(k => `<div class="kv"><span class="k">${esc(k)}</span>` +
+          `<span class="v">${esc(pc[k])}</span></div>`).join("");
+      }
+      if (p.specialty) {
+        html += `<div class="kv"><span class="k">specialty</span><span class="v">${esc(p.specialty)}</span></div>`;
+      }
+      const pr = p.provenance || {};
+      html += '<div class="prov">';
+      const fs = pr.freshest_source_seconds;
+      if (fs != null) {
+        const cls = fs < 86400 ? "fresh" : "stale";
+        html += `<div>freshest source: <span class="${cls}">${fmtAge(fs)}</span></div>`;
+      }
+      if (pr.source_record_ids && pr.source_record_ids.length) {
+        html += '<div>sources: ' + pr.source_record_ids.map(s => `<span class="tag">${esc(s)}</span>`).join("") + '</div>';
+      }
+      if (pr.missing_facts && pr.missing_facts.length) {
+        html += '<div>missing: ' + pr.missing_facts.map(s => `<span class="tag">${esc(s)}</span>`).join("") + '</div>';
+      }
+      if (pr.conflicting_facts && pr.conflicting_facts.length) {
+        html += '<div>conflicting: ' + pr.conflicting_facts.map(s => `<span class="tag">${esc(s)}</span>`).join("") + '</div>';
+      }
+      html += `<div>builder ${esc(pr.builder_version || "—")}</div>`;
+      html += '</div>';
+      return html || '<div class="empty">No structured context on this snapshot.</div>';
+    }
+
+    function fmtAge(sec) {
+      if (sec < 3600) return Math.round(sec/60) + "m ago";
+      if (sec < 86400) return Math.round(sec/3600) + "h ago";
+      return Math.round(sec/86400) + "d ago";
+    }
+
+    boot();
+  </script>
+</body>
+</html>

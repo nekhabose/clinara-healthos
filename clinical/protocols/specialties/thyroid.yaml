@@ -1,0 +1,113 @@
+# Thyroid protocol pack (Phase 10 — Specialty Protocol Breadth, closes gaps.md G6).
+#
+# Parameterized, specialty-scoped, deterministic rules authored as DATA — the engine loads
+# them, they are never application logic. Thresholds carry pack defaults and are overridable
+# per practice via a SpecialtyThresholdPolicy WITHOUT any code change ({param: <name>} is
+# bound at load time by domains/specialties). Every rule keeps its outcome sub-critical; the
+# hard critical floor (clinara_protocol_engine.critical) always runs first and un-weakenably.
+specialty: thyroid
+display_name: Thyroid
+version: 1
+evidence:
+  - "ATA 2014 Hypothyroidism Guidelines"
+  - "AACE/ACE Thyroid Guidelines"
+parameters:
+  tsh_upper: 4.5          # upper limit of normal TSH (mIU/L)
+  tsh_overt: 10.0         # overt hypothyroid threshold (mIU/L)
+  tsh_lower: 0.4          # lower limit of normal TSH (mIU/L)
+rules:
+  - id: tsh_subclinical_hypothyroid
+    version: 1
+    marker: tsh
+    scope:
+      specialties:
+        - endocrinology
+        - primary_care
+        - family_medicine
+        - internal_medicine
+        - psychiatry
+        - cardiology
+        - obstetrics
+        - womens_health
+        - mens_health
+        - geriatrics
+        - sleep_medicine
+        - otolaryngology
+        - ophthalmology
+    when:
+      all:
+        - {fact: lab.tsh, operator: greater_than, value: {param: tsh_upper}}
+        - {fact: lab.tsh, operator: less_than, value: {param: tsh_overt}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 90
+      reason_codes: [TSH_SUBCLINICAL_HYPOTHYROID]
+    safety:
+      requires_manual_review: false
+      excluded_when: [patient.pediatric_patient]
+  - id: tsh_overt_hypothyroid
+    version: 1
+    marker: tsh
+    scope:
+      specialties:
+        - endocrinology
+        - primary_care
+        - family_medicine
+        - internal_medicine
+        - psychiatry
+        - cardiology
+        - obstetrics
+        - womens_health
+        - mens_health
+        - geriatrics
+        - sleep_medicine
+        - otolaryngology
+        - ophthalmology
+    when:
+      all:
+        - {fact: lab.tsh, operator: greater_than_or_equal, value: {param: tsh_overt}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [TSH_OVERT_HYPOTHYROID]
+    safety:
+      requires_manual_review: false
+      excluded_when: [patient.pediatric_patient]
+  - id: tsh_suppressed_hyperthyroid
+    version: 1
+    marker: tsh
+    scope:
+      specialties:
+        - endocrinology
+        - primary_care
+        - family_medicine
+        - internal_medicine
+        - psychiatry
+        - cardiology
+        - obstetrics
+        - womens_health
+        - mens_health
+        - geriatrics
+        - sleep_medicine
+        - otolaryngology
+        - ophthalmology
+    when:
+      all:
+        - {fact: lab.tsh, operator: less_than, value: {param: tsh_lower}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [TSH_SUPPRESSED_HYPERTHYROID]
+    safety:
+      requires_manual_review: false
+      excluded_when: [patient.pediatric_patient]
+test_cases:
+  - {name: tsh_subclinical_flags, marker: tsh, specialty: endocrinology,
+     facts: {lab.tsh: 6.5}, expected: routine_follow_up}
+  - {name: tsh_overt_flags, marker: tsh, specialty: endocrinology,
+     facts: {lab.tsh: 12.0}, expected: clinician_review_required}
+  - {name: tsh_low_flags, marker: tsh, specialty: endocrinology,
+     facts: {lab.tsh: 0.1}, expected: clinician_review_required}
+  - {name: tsh_normal_silent, marker: tsh, specialty: endocrinology,
+     facts: {lab.tsh: 2.0}, expected: normal}

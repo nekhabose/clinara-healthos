@@ -41,18 +41,38 @@ DOMAIN_APPS = [
     "domains.tenants",
     "domains.audit",
     "domains.operations",
-    # Phase 1+ (declared here as the code lands):
-    # "domains.integrations",
-    # "domains.terminology",
-    # "domains.clinical_data",
-    # "domains.context",
-    # "domains.protocols",
-    # "domains.workflows",
-    # "domains.generation",
-    # "domains.safety",
-    # "domains.delivery",
-    # "domains.feedback",
-    # "domains.analytics",
+    # Phase 1 — Results Intelligence MVP:
+    "domains.integrations",
+    "domains.terminology",
+    "domains.clinical_data",
+    "domains.context",
+    "domains.workflows",
+    "domains.generation",
+    "domains.safety",
+    # Phase 2 — Clinical Rule Studio:
+    "domains.protocols",
+    # Phase 3 — Production EHR Integration:
+    "domains.delivery",
+    # Phase 8 — EHR-Embedded Clinician Surface:
+    "domains.embedded",
+    # Phase 4 — Prescription & Refill Intelligence:
+    "domains.refills",
+    # Phase 5 — Patient Message Intelligence:
+    "domains.messages",
+    # Phase 6 — Analytics & Personalization:
+    "domains.feedback",
+    "domains.analytics",
+    # Phase 9 — Billing & Coding Intelligence:
+    "domains.coding",
+    # Phase 10 — Specialty Protocol Breadth:
+    "domains.specialties",
+    # Phase 11 — Data Lifecycle & Compliance Hardening:
+    "domains.retention",
+    # GA hardening — emergency controls, reliability, DR, compliance:
+    "domains.killswitch",
+    "domains.reliability",
+    "domains.continuity",
+    "domains.compliance",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PLATFORM_APPS + DOMAIN_APPS
@@ -68,6 +88,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     # Clinara cross-cutting middleware:
     "clinara.middleware.tenant.TenantContextMiddleware",       # sets RLS session var per request
+    "clinara.middleware.rbac.RbacMiddleware",                  # role-gates /api/v1/* per spec §10.2
     "clinara.middleware.phi_safe_logging.CorrelationIdMiddleware",
 ]
 
@@ -78,7 +99,9 @@ ASGI_APPLICATION = "clinara.asgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # The EHR-embedded surface (Phase 8) renders in all environments; the demo console
+        # template lives here too but its URLs are DEBUG-gated.
+        "DIRS": [str(BASE_DIR / "clinara" / "templates")],
         "APP_DIRS": True,
         "OPTIONS": {"context_processors": [
             "django.contrib.auth.context_processors.auth",
@@ -101,7 +124,9 @@ DATABASES = {
 
 # ---- Cache / Celery ----
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}}
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}
+}
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/2")
 
@@ -111,6 +136,21 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
 }
+
+# ---- Clinical content (versioned rule + template artifacts, plan Phase 1) ----
+# Rules are data, not code: the engine loads YAML from the repo. Overridable per env.
+_REPO_ROOT = BASE_DIR.parent.parent
+CLINICAL_RULES_DIR = env("CLINARA_RULES_DIR", default=str(_REPO_ROOT / "clinical" / "protocols"))
+# Phase 10 — parameterized specialty protocol packs (loaded + threshold-bound per tenant by
+# domains/specialties). A subdirectory of the rules dir, so the base loader (top-level glob)
+# never picks up unbound {param: ...} templates.
+CLINICAL_SPECIALTY_PACKS_DIR = env(
+    "CLINARA_SPECIALTY_PACKS_DIR",
+    default=str(_REPO_ROOT / "clinical" / "protocols" / "specialties"),
+)
+CLINICAL_TEMPLATES_PATH = env(
+    "CLINARA_TEMPLATES_PATH", default=str(_REPO_ROOT / "clinical" / "templates" / "results.yaml")
+)
 
 # ---- i18n / static ----
 LANGUAGE_CODE = "en-us"
@@ -140,3 +180,21 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# ---- EHR write-back (plan Phase 7 — Real EMR Connectivity) ----
+# Per-vendor SMART Backend Services config for outbound Task/Communication write-back.
+# Empty by default so no environment writes to a live EHR unless explicitly configured;
+# production.py fills real endpoints from the environment. Each entry:
+#   {"base_url", "token_url", "client_id", "scopes": [...], "vendor": "epic"|"athena"}.
+# The JWT signer is injected at call time (production: RS384 over a vault-held key) and is
+# never stored here — this block holds endpoints and non-secret client identifiers only.
+EHR_WRITE_BACK: dict[str, dict] = {}
+
+# ---- EHR-embedded SMART launch (plan Phase 8 — EHR-Embedded Clinician Surface) ----
+# Injection config for the inbound OIDC id_token verifier used by the SMART EHR-launch flow.
+# Production sets ``id_token_verifier`` to an RS256/JWKS ``Verifier`` (resolved from the EHR's
+# published keys); dev/demo may set ``dev_id_token_secret`` for an HMAC verifier. Empty by
+# default so no environment can complete a launch until a verifier is explicitly configured
+# (fail-closed — an unverifiable id_token is never trusted). Issuer→tenant routing and the
+# app's client registration live in the ``embedded.EhrConnection`` table, not here.
+EHR_LAUNCH: dict = {}

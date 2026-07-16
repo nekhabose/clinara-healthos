@@ -2,7 +2,12 @@
 
 from .enums import (
     AutomationMode,
+    AutomationStatus,
+    KillSwitchScope,
     MessageUrgency,
+    Priority,
+    RecommendedAction,
+    RefillOutcome,
     ResultClassification,
     Role,
 )
@@ -12,7 +17,12 @@ __all__ = [
     "DomainEvent",
     "EventType",
     "AutomationMode",
+    "AutomationStatus",
+    "KillSwitchScope",
     "MessageUrgency",
+    "Priority",
+    "RecommendedAction",
+    "RefillOutcome",
     "ResultClassification",
     "Role",
 ]

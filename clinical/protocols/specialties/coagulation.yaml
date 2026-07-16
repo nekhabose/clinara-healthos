@@ -1,0 +1,57 @@
+# Coagulation (INR) pack (Phase 10 — closes gaps.md G6).
+# Supra-/sub-therapeutic INR for anticoagulated patients. The >5.0 bleeding-risk band is the
+# hard critical floor (engine), so the supratherapeutic rule is bounded at <= 5.0. The
+# subtherapeutic rule is gated on patient.on_anticoagulation (a normal INR is only "low" when
+# the patient is meant to be anticoagulated).
+specialty: coagulation
+display_name: Coagulation (INR)
+version: 1
+evidence:
+  - "CHEST Antithrombotic Therapy Guidelines"
+parameters:
+  inr_upper: 3.0          # ratio — upper therapeutic bound
+  inr_lower: 2.0          # ratio — lower therapeutic bound
+_scope: &coag_scope
+  - hematology
+  - cardiology
+  - vascular_medicine
+  - neurology
+  - internal_medicine
+  - primary_care
+rules:
+  - id: inr_supratherapeutic
+    version: 1
+    marker: inr
+    scope: {specialties: *coag_scope}
+    when:
+      all:
+        - {fact: lab.inr, operator: greater_than, value: {param: inr_upper}}
+        - {fact: lab.inr, operator: less_than_or_equal, value: 5.0}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [INR_SUPRATHERAPEUTIC]
+    safety: {requires_manual_review: true, excluded_when: []}
+  - id: inr_subtherapeutic
+    version: 1
+    marker: inr
+    scope: {specialties: *coag_scope}
+    when:
+      all:
+        - {fact: patient.on_anticoagulation, operator: equals, value: true}
+        - {fact: lab.inr, operator: less_than, value: {param: inr_lower}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 14
+      reason_codes: [INR_SUBTHERAPEUTIC]
+    safety: {requires_manual_review: false, excluded_when: []}
+test_cases:
+  - {name: inr_supratherapeutic_flags, marker: inr, specialty: cardiology,
+     facts: {lab.inr: 4.2, patient.on_anticoagulation: true}, expected: clinician_review_required}
+  - {name: inr_critical_escalates, marker: inr, specialty: cardiology,
+     facts: {lab.inr: 6.0, patient.on_anticoagulation: true}, expected: critical_escalation}
+  - {name: inr_subtherapeutic_flags, marker: inr, specialty: cardiology,
+     facts: {lab.inr: 1.4, patient.on_anticoagulation: true}, expected: routine_follow_up}
+  - {name: inr_therapeutic_silent, marker: inr, specialty: cardiology,
+     facts: {lab.inr: 2.5, patient.on_anticoagulation: true}, expected: normal}

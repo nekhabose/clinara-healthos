@@ -1,0 +1,27 @@
+{
+  "app_name": "Clinara HealthOS",
+  "vendor": "athena",
+  "listing": "athenahealth Marketplace",
+  "summary": "Governed protocol automation embedded in athenaOne — results, patient messages, and refills reviewed in-workflow with a provenance-tracked chart-context panel and one-click direct release. No additional login.",
+  "launch_type": "ehr",
+  "launch_url": "https://app.clinara.health/api/v1/smart/launch",
+  "redirect_uris": [
+    "https://app.clinara.health/api/v1/smart/callback"
+  ],
+  "fhir_version": "4.0.1",
+  "client_type": "public",
+  "id_token_signing_alg": "RS256",
+  "scopes": [
+    "openid",
+    "fhirUser",
+    "launch",
+    "patient/Observation.read",
+    "patient/Condition.read",
+    "patient/MedicationRequest.read",
+    "user/Task.write",
+    "user/Communication.write"
+  ],
+  "supported_workflows": ["results", "patient-messages", "refills"],
+  "embedded_surface_url": "https://app.clinara.health/embedded/",
+  "contact": "integrations@clinara.health"
+}

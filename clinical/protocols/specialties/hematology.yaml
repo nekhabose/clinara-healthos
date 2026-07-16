@@ -1,0 +1,96 @@
+# Hematology (CBC) pack (Phase 10 — closes gaps.md G6).
+# Anemia, thrombocytopenia, and leukocytosis bands. Every band is bounded ABOVE the hard
+# critical floor (Hgb <6, Plt <20, WBC >50 escalate un-weakenably in the engine), so a pack
+# rule can never claim a non-critical outcome for a critical value.
+specialty: hematology
+display_name: Hematology (CBC)
+version: 1
+evidence:
+  - "ASH Clinical Practice Guidelines"
+  - "WHO Anemia Classification"
+parameters:
+  hgb_low: 12.0           # g/dL — below reference (anemia)
+  hgb_severe: 8.0         # g/dL — severe (but above the <6 critical floor)
+  plt_low: 150.0          # 10^9/L — thrombocytopenia
+  wbc_high: 11.0          # 10^9/L — leukocytosis
+_scope: &heme_scope
+  - hematology
+  - medical_oncology
+  - primary_care
+  - family_medicine
+  - internal_medicine
+  - geriatrics
+  - womens_health
+  - obstetrics
+  - gynecology
+  - rheumatology
+  - sports_medicine
+  - allergy_immunology
+rules:
+  - id: anemia_mild_moderate
+    version: 1
+    marker: hemoglobin
+    scope: {specialties: *heme_scope}
+    when:
+      all:
+        - {fact: lab.hemoglobin, operator: greater_than_or_equal, value: {param: hgb_severe}}
+        - {fact: lab.hemoglobin, operator: less_than, value: {param: hgb_low}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 90
+      reason_codes: [ANEMIA_MILD_MODERATE]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: anemia_severe
+    version: 1
+    marker: hemoglobin
+    scope: {specialties: *heme_scope}
+    when:
+      all:
+        - {fact: lab.hemoglobin, operator: greater_than_or_equal, value: 6.0}
+        - {fact: lab.hemoglobin, operator: less_than, value: {param: hgb_severe}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [ANEMIA_SEVERE]
+    safety: {requires_manual_review: true, excluded_when: []}
+  - id: thrombocytopenia
+    version: 1
+    marker: platelets
+    scope: {specialties: *heme_scope}
+    when:
+      all:
+        - {fact: lab.platelets, operator: greater_than_or_equal, value: 20.0}
+        - {fact: lab.platelets, operator: less_than, value: {param: plt_low}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 30
+      reason_codes: [THROMBOCYTOPENIA]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: leukocytosis
+    version: 1
+    marker: wbc
+    scope: {specialties: *heme_scope}
+    when:
+      all:
+        - {fact: lab.wbc, operator: greater_than, value: {param: wbc_high}}
+        - {fact: lab.wbc, operator: less_than_or_equal, value: 50.0}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [LEUKOCYTOSIS]
+    safety: {requires_manual_review: false, excluded_when: []}
+test_cases:
+  - {name: anemia_mild_flags, marker: hemoglobin, specialty: hematology,
+     facts: {lab.hemoglobin: 10.5}, expected: routine_follow_up}
+  - {name: anemia_severe_flags, marker: hemoglobin, specialty: hematology,
+     facts: {lab.hemoglobin: 7.0}, expected: clinician_review_required}
+  - {name: anemia_critical_escalates, marker: hemoglobin, specialty: hematology,
+     facts: {lab.hemoglobin: 5.0}, expected: critical_escalation}
+  - {name: hemoglobin_normal_silent, marker: hemoglobin, specialty: hematology,
+     facts: {lab.hemoglobin: 14.0}, expected: normal}
+  - {name: thrombocytopenia_flags, marker: platelets, specialty: hematology,
+     facts: {lab.platelets: 90.0}, expected: routine_follow_up}
+  - {name: leukocytosis_flags, marker: wbc, specialty: hematology,
+     facts: {lab.wbc: 16.0}, expected: clinician_review_required}

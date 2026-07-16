@@ -1,0 +1,27 @@
+{
+  "app_name": "Clinara HealthOS",
+  "vendor": "epic",
+  "listing": "Epic Showroom",
+  "summary": "Deterministic, auditable results / messages / refill review embedded in Hyperspace — protocol summaries at direct release, with a live chart-context panel. No separate login.",
+  "launch_type": "ehr",
+  "launch_url": "https://app.clinara.health/api/v1/smart/launch",
+  "redirect_uris": [
+    "https://app.clinara.health/api/v1/smart/callback"
+  ],
+  "fhir_version": "4.0.1",
+  "client_type": "public",
+  "id_token_signing_alg": "RS256",
+  "scopes": [
+    "openid",
+    "fhirUser",
+    "launch",
+    "patient/Observation.read",
+    "patient/Condition.read",
+    "patient/MedicationRequest.read",
+    "user/Task.write",
+    "user/Communication.write"
+  ],
+  "supported_workflows": ["results", "patient-messages", "refills"],
+  "embedded_surface_url": "https://app.clinara.health/embedded/",
+  "contact": "integrations@clinara.health"
+}

@@ -15,5 +15,10 @@ app.conf.beat_schedule = {
     "relay-domain-event-outbox": {
         "task": "core.tasks.relay_outbox",
         "schedule": 5.0,
-    }
+    },
+    # Phase 11 — Data Lifecycle: minimal-necessary retention/purge, once daily.
+    "retention-scheduled-purge": {
+        "task": "domains.retention.tasks.run_scheduled_purge_all",
+        "schedule": 86400.0,
+    },
 }

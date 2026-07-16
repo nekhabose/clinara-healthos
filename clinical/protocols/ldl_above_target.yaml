@@ -1,0 +1,24 @@
+# LDL above target — routine follow-up (Phase 1).
+id: ldl_above_target
+version: 1
+marker: ldl_cholesterol
+scope:
+  specialties: []          # applies across specialties
+when:
+  all:
+    - fact: lab.ldl
+      operator: greater_than_or_equal
+      value: 130.0
+then:
+  classification: routine_follow_up
+  recommended_action: routine_follow_up
+  recommended_interval_days: 180
+  patient_template: ldl_above_target_v1
+  clinician_context:
+    - prior_ldl
+    - lipid_lowering_therapy
+  reason_codes:
+    - LDL_ABOVE_TARGET
+safety:
+  requires_manual_review: false
+  excluded_when: []

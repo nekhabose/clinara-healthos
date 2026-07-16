@@ -11,11 +11,15 @@ dependencies = [
   "redis>=5.0",
   "celery>=5.3",
   "django-environ>=0.11",
+  "PyYAML>=6",
   "opentelemetry-sdk>=1.24",
   "opentelemetry-instrumentation-django>=0.45b0",
   # Local workspace packages (editable installs in dev).
   "clinara-shared-types",
   "clinara-clinical-models",
+  "clinara-terminology",
+  "clinara-protocol-engine",
+  "clinara-integration-sdk",
 ]
 
 [project.optional-dependencies]
@@ -28,16 +32,23 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "clinara.settings.local"
+# SQLite by default so the suite runs anywhere; set CLINARA_TEST_DB=postgres to exercise RLS.
+DJANGO_SETTINGS_MODULE = "clinara.settings.test"
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Migrations are generated; nullable string fields (SSO subject, causation id) are intentional.
+extend-exclude = ["**/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
+# DJ001: null=True on optional string fields is a deliberate choice here.
+# UP042: we use the `(str, Enum)` idiom (matching packages/) rather than StrEnum for
+# stable JSON/`.value` semantics across the shared contract layer.
+ignore = ["DJ001", "UP042"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]

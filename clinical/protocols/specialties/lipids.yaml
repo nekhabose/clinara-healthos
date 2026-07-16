@@ -1,0 +1,90 @@
+# Extended lipids / cardiometabolic pack (Phase 10 — closes gaps.md G6).
+# Covers HDL, triglycerides, and total cholesterol. LDL keeps its Phase 1 base rule; this
+# pack complements it for the wider cardiometabolic specialties. Thresholds are practice-
+# customizable ({param: ...}) and every outcome stays sub-critical.
+specialty: lipids
+display_name: Lipids (cardiometabolic)
+version: 1
+evidence:
+  - "2018 AHA/ACC Cholesterol Guideline"
+  - "NLA Dyslipidemia Recommendations"
+parameters:
+  tg_high: 150.0          # mg/dL — above optimal
+  tg_severe: 500.0        # mg/dL — pancreatitis risk
+  hdl_low: 40.0           # mg/dL — low HDL
+  tc_high: 240.0          # mg/dL — high total cholesterol
+_scope: &lipid_scope
+  - lipidology
+  - cardiology
+  - primary_care
+  - family_medicine
+  - internal_medicine
+  - vascular_medicine
+  - preventive_medicine
+  - endocrinology
+  - obesity_medicine
+  - mens_health
+rules:
+  - id: triglycerides_above_optimal
+    version: 1
+    marker: triglycerides
+    scope: {specialties: *lipid_scope}
+    when:
+      all:
+        - {fact: lab.triglycerides, operator: greater_than_or_equal, value: {param: tg_high}}
+        - {fact: lab.triglycerides, operator: less_than, value: {param: tg_severe}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 180
+      reason_codes: [TRIGLYCERIDES_ABOVE_OPTIMAL]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: triglycerides_severe
+    version: 1
+    marker: triglycerides
+    scope: {specialties: *lipid_scope}
+    when:
+      all:
+        - {fact: lab.triglycerides, operator: greater_than_or_equal, value: {param: tg_severe}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [TRIGLYCERIDES_SEVERE_PANCREATITIS_RISK]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: hdl_low
+    version: 1
+    marker: hdl_cholesterol
+    scope: {specialties: *lipid_scope}
+    when:
+      all:
+        - {fact: lab.hdl, operator: less_than, value: {param: hdl_low}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 365
+      reason_codes: [HDL_BELOW_TARGET]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: total_cholesterol_high
+    version: 1
+    marker: total_cholesterol
+    scope: {specialties: *lipid_scope}
+    when:
+      all:
+        - {fact: lab.total_cholesterol, operator: greater_than_or_equal, value: {param: tc_high}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 365
+      reason_codes: [TOTAL_CHOLESTEROL_HIGH]
+    safety: {requires_manual_review: false, excluded_when: []}
+test_cases:
+  - {name: tg_above_optimal_flags, marker: triglycerides, specialty: lipidology,
+     facts: {lab.triglycerides: 220.0}, expected: routine_follow_up}
+  - {name: tg_severe_flags, marker: triglycerides, specialty: lipidology,
+     facts: {lab.triglycerides: 640.0}, expected: clinician_review_required}
+  - {name: tg_normal_silent, marker: triglycerides, specialty: lipidology,
+     facts: {lab.triglycerides: 100.0}, expected: normal}
+  - {name: hdl_low_flags, marker: hdl_cholesterol, specialty: cardiology,
+     facts: {lab.hdl: 32.0}, expected: routine_follow_up}
+  - {name: total_chol_high_flags, marker: total_cholesterol, specialty: cardiology,
+     facts: {lab.total_cholesterol: 260.0}, expected: routine_follow_up}

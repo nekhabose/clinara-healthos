@@ -1,0 +1,55 @@
+# Inflammatory markers pack (Phase 10 — closes gaps.md G6).
+# CRP / ESR elevation for rheumatology, infectious disease, and the specialties that use them
+# in infection / inflammation workup (pulmonology, podiatry osteomyelitis, allergy/immunology).
+specialty: inflammatory
+display_name: Inflammatory markers
+version: 1
+evidence:
+  - "ACR Clinical Guidance"
+parameters:
+  crp_upper: 10.0         # mg/L — clinically meaningful elevation
+  esr_upper: 30.0         # mm/hr — elevated
+_scope: &infl_scope
+  - rheumatology
+  - infectious_disease
+  - primary_care
+  - family_medicine
+  - internal_medicine
+  - pulmonology
+  - podiatry
+  - allergy_immunology
+rules:
+  - id: crp_elevated
+    version: 1
+    marker: crp
+    scope: {specialties: *infl_scope}
+    when:
+      all:
+        - {fact: lab.crp, operator: greater_than, value: {param: crp_upper}}
+    then:
+      classification: clinician_review_required
+      recommended_action: clinician_review
+      reason_codes: [CRP_ELEVATED]
+    safety: {requires_manual_review: false, excluded_when: []}
+  - id: esr_elevated
+    version: 1
+    marker: esr
+    scope: {specialties: *infl_scope}
+    when:
+      all:
+        - {fact: lab.esr, operator: greater_than, value: {param: esr_upper}}
+    then:
+      classification: routine_follow_up
+      recommended_action: routine_follow_up
+      recommended_interval_days: 60
+      reason_codes: [ESR_ELEVATED]
+    safety: {requires_manual_review: false, excluded_when: []}
+test_cases:
+  - {name: crp_elevated_flags, marker: crp, specialty: rheumatology,
+     facts: {lab.crp: 45.0}, expected: clinician_review_required}
+  - {name: crp_normal_silent, marker: crp, specialty: rheumatology,
+     facts: {lab.crp: 1.0}, expected: normal}
+  - {name: esr_elevated_flags, marker: esr, specialty: infectious_disease,
+     facts: {lab.esr: 55.0}, expected: routine_follow_up}
+  - {name: esr_normal_silent, marker: esr, specialty: infectious_disease,
+     facts: {lab.esr: 10.0}, expected: normal}
