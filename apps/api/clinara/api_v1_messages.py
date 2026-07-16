@@ -40,6 +40,9 @@ def _detail(m: PatientMessage) -> dict:
     c = m.classifications.order_by("-created_at").first()
     data = _summary(m)
     data.update({
+        # The verbatim inbound message (stored unmutated per spec §6.2). Surfaced only in the
+        # detail view — "the original is always one tap away" — not in the list summaries.
+        "original_text": m.original_text,
         "reason_codes": m.reason_codes,
         "draft_response": m.draft_response or None,
         "summary": c.summary if c else "",
