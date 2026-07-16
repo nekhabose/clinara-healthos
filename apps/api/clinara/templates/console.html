@@ -483,22 +483,26 @@
           <div style="font-size:17px;font-weight:600;">Clinara HealthOS</div>
         </div>
       </div>
-      <p class="sub">A calm clinical command center. Choose a demo role to sign in.</p>
+      <p class="sub">A calm clinical command center. Sign in with your Clinara credentials.</p>
+      {% if login_error %}
+      <div style="margin-bottom:16px;padding:10px 12px;border-radius:var(--r-sm);background:var(--crit-soft);border:1px solid var(--crit-border);color:var(--crit);font-size:13px;">{{ login_error }}</div>
+      {% endif %}
       <form method="post" action="/console/login">
         <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" />
         <div class="field">
-          <label for="role">Sign in as</label>
-          <select id="role" name="username">
-            <option value="clinician">Clinician — results &amp; message inbox</option>
-            <option value="programmer">Clinical programmer — protocol studio</option>
-            <option value="nurse">Nurse — refills</option>
-            <option value="analyst">Operations analyst — analytics</option>
-          </select>
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username"
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
+                 value="{{ login_username|default:'' }}" required autofocus />
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
         </div>
         <div style="margin-top:18px"><button class="btn" style="width:100%" type="submit">Sign in</button></div>
       </form>
-      <p class="hint">Every action here drives the real, audited service layer. If sign-in fails, run
-        <span class="mono">manage.py seed_demo</span> first.</p>
+      <p class="hint">Every action here drives the real, audited service layer. Access is
+        credentialed and every action is attributed to your account.</p>
     </div>
   </div>
   {% else %}

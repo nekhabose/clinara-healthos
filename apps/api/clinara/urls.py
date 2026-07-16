@@ -26,6 +26,14 @@ urlpatterns = [
 # EHR-embedded clinician surface — rendered inside the EHR after a SMART launch (Phase 8).
 urlpatterns += [path("embedded/", include("clinara.embedded_surface"))]
 
-# Demo console — dev/demo only (same-origin UI over the API). Never mounted in production.
-if settings.DEBUG:
+# Clinician console — same-origin UI over the API. Mounted in DEBUG and wherever the
+# deployment opts in via ENABLE_CONSOLE (e.g. the hosted Vercel surface). Sign-in is
+# credentialed (username + password); see clinara.console.
+if settings.DEBUG or getattr(settings, "ENABLE_CONSOLE", False):
     urlpatterns += [path("console/", include("clinara.console"))]
+
+# Convenience: send the site root to the console so the deployed URL lands on sign-in.
+if settings.DEBUG or getattr(settings, "ENABLE_CONSOLE", False):
+    from django.views.generic.base import RedirectView
+
+    urlpatterns += [path("", RedirectView.as_view(url="/console/", permanent=False))]

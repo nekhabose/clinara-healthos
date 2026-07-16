@@ -28,8 +28,14 @@ def set_db_tenant(tenant_id: str | None) -> None:
     """
     if connection.vendor != "postgresql":
         return
+    # ``tenant_id`` may arrive as a ``uuid.UUID`` (User.organization_id is a UUIDField), which
+    # psycopg adapts to a Postgres ``uuid`` param — set_config() only accepts ``text``. Cast to
+    # the canonical hyphenated string so the value matches the RLS policy's ``tenant_id::text``.
     with connection.cursor() as cursor:
-        cursor.execute("SELECT set_config('app.current_tenant', %s, false)", [tenant_id or ""])
+        cursor.execute(
+            "SELECT set_config('app.current_tenant', %s, false)",
+            [str(tenant_id) if tenant_id else ""],
+        )
 
 
 class TenantContextMiddleware(MiddlewareMixin):

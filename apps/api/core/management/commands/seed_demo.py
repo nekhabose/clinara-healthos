@@ -8,6 +8,7 @@ every console tab has something to show. Run with the demo settings:
 """
 from __future__ import annotations
 
+import os
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -17,7 +18,9 @@ from clinara.middleware.phi_safe_logging import correlation_id
 from clinara.middleware.tenant import current_tenant_id, set_db_tenant
 
 DEMO_TENANT = "11111111-1111-1111-1111-111111111111"
-DEMO_PASSWORD = "demo12345"
+# The seeded account password. Overridable via the environment so a hosted deployment can set
+# a real credential (the console login is credentialed username + password) without editing code.
+DEMO_PASSWORD = os.environ.get("CLINARA_DEMO_PASSWORD", "demo12345")
 
 
 class Command(BaseCommand):
