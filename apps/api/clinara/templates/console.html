@@ -981,7 +981,7 @@
             ${comm.validation_passed ? `<span class="chip ok" style="margin-left:6px">${ic('check')}Validated</span>` : ''}
             ${comm.used_fallback ? `<span class="chip warn" style="margin-left:6px">Fallback</span>` : ''}</div>
           <div class="ai-box">
-            <div class="ai-tag">${ic('info')}AI-drafted · clinician approves before it sends</div>
+            <div class="ai-tag">${ic('info')}Protocol-drafted · clinician approves before it sends</div>
             <div class="msg-preview" data-editable>${esc(comm.patient_message_preview || '(clinician-only — no patient-facing message)')}</div>
           </div>
         </div>
@@ -994,7 +994,7 @@
         <div>
           <div class="subhead">Summary</div>
           <div class="ai-box">
-            <div class="ai-tag">${ic('info')}AI summary — original message preserved below</div>
+            <div class="ai-tag">${ic('info')}Protocol summary — original message preserved below</div>
             <dl class="kv">
               <dt>Intent</dt><dd>${esc(titleize(d.category) || '—')}</dd>
               <dt>Urgency</dt><dd>${esc(titleize(d.urgency))}</dd>
@@ -1015,7 +1015,7 @@
         ${d.draft_response ? `<div>
           <div class="subhead">Suggested response</div>
           <div class="ai-box">
-            <div class="ai-tag">${ic('info')}AI-drafted suggestion — not a clinical decision. Edit before sending.</div>
+            <div class="ai-tag">${ic('info')}Protocol-drafted suggestion — not a clinical decision. Edit before sending.</div>
             <div class="msg-preview" data-editable>${esc(d.draft_response)}</div>
           </div></div>` : ''}
         <div class="actions" data-actions></div>`;
