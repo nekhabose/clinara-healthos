@@ -1,8 +1,11 @@
 # Runtime dependencies for the Vercel serverless deployment (api/index.py -> Django WSGI).
 # Mirrors apps/api/pyproject.toml minus the OpenTelemetry stack (unused at runtime — verified
 # no runtime imports), plus WhiteNoise for static handling on the read-only serverless FS.
-# The shared clinical packages are installed from the repo tree (path installs) so the same
-# code the tests run is what serves in production.
+#
+# The shared clinical packages (clinara_terminology, clinara_protocol_engine, …) are NOT listed
+# here: they are pure-Python, depend only on the third-party libs below, and are imported from
+# source via api/index.py adding each packages/* dir to sys.path. (Vercel's uv builder rejects
+# path installs whose directory name differs from the distribution name.)
 
 Django>=5.0,<6.0
 djangorestframework>=3.15
@@ -13,10 +16,3 @@ celery>=5.3
 django-environ>=0.11
 PyYAML>=6
 whitenoise>=6.6
-
-# Local workspace packages (clinical domain libraries).
-./packages/shared-types
-./packages/clinical-models
-./packages/terminology
-./packages/protocol-engine
-./packages/integration-sdk

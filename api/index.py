@@ -16,6 +16,17 @@ _API_DIR = _REPO_ROOT / "apps" / "api"
 # Make the Django project importable (settings, clinara.*, domains.*, core.*).
 sys.path.insert(0, str(_API_DIR))
 
+# Make the shared clinical packages importable from source (clinara_terminology,
+# clinara_protocol_engine, …). They are pure-Python and depend only on third-party libs
+# already in requirements.txt, so we add each package root to the path rather than
+# pip-installing them (Vercel's uv builder rejects path installs whose directory name
+# differs from the distribution name).
+_PACKAGES_DIR = _REPO_ROOT / "packages"
+if _PACKAGES_DIR.is_dir():
+    for _pkg in sorted(_PACKAGES_DIR.iterdir()):
+        if _pkg.is_dir():
+            sys.path.insert(0, str(_pkg))
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "clinara.settings.vercel")
 
 from clinara.wsgi import application  # noqa: E402
